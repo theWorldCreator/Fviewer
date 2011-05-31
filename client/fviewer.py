@@ -176,14 +176,17 @@ class FviewerDesign:
 		
 		# Menu
 		menu = gtk.Menu()
+		# Settings menu item
 		menu_item = gtk.MenuItem('Настройки')
 		menu_item.connect('activate', lambda x: self.settings_window.present())
 		menu.append(menu_item)
-
+		
+		# List of project menu item
 		menu_item = gtk.MenuItem('Список проектов')
 		menu_item.connect('activate', self.show_projects_list, 0, 1)
 		menu.append(menu_item)
 		
+		# Pause menu item
 		menu_item = gtk.CheckMenuItem('Пауза')
 		menu_item.connect('toggled', self.pause)
 		menu.append(menu_item)
@@ -203,6 +206,7 @@ class FviewerDesign:
 		self.tray = gtk.StatusIcon()
 		
 		self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
+		# "No connection" tooltip
 		self.tray.set_tooltip('Нет соединения')
 		self.tray.connect('popup-menu', self.menu_popup, menu)
 		self.tray.connect('activate', self.activate_tray)
@@ -286,10 +290,7 @@ class FviewerDesign:
 				self.tray.set_from_pixbuf(self.tray_iconbuf)
 		
 	def show_next_unread_project(self, open_anyway = False):
-		if (open_anyway or settings.new_window == 1)
-				and fviewer.unread_projects_count > 0
-				and self.main_window.get_property('visible') == False
-				and self.dialog.get_property('visible') == False:
+		if (open_anyway or settings.new_window == 1) and fviewer.unread_projects_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
 			
 			if self.max_projects < fviewer.projects_count:
 				count = self.max_projects
@@ -567,6 +568,7 @@ settings = Settings()"""
 	
 	def pause(self, item):
 		fviewer.quit = item.get_active()
+		# "Pause" tooltip
 		self.tray.set_tooltip('Пауза')
 		self.make_icons_grey(fviewer.quit)
 	
@@ -800,12 +802,15 @@ def get_project_status_str(project):
 	categories_count = len(project['categ'])
 	project['status_str'] = ''
 	if project['money'] > 0:
+		# "Budget: ..."
 		project['status_str'] += "Бюджет: " + str(to_another_money_type(project['money'], 2, settings.money_type)) + " " + money_types[settings.money_type] + "    "
 	project['status_str'] += time.strftime("Добавленно в %I:%M", time.localtime(project['pubDate'])) + "    "
 	if categories_count > 0:
 		if categories_count == 1:
+			# "Category: "
 			project['status_str'] += "Категория: "
 		else:
+			# "Categories: "
 			project['status_str'] += "Категории: "
 		for cat in project['categ']:
 			project['status_str'] += categories_list[cat] + ", "

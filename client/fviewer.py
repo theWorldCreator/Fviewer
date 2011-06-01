@@ -2,13 +2,12 @@
 # coding: utf-8
 
 import threading
-import sys
-import string
+#import sys
 import os, re, json
 import socket, time, gobject
-import gtk, pygtk
 from datetime import datetime
-import gst, pygst
+import gtk
+import gst
 import webkit
 from random import randrange
 
@@ -279,10 +278,10 @@ class FviewerDesign:
 	def change_icon(self):
 		if self.unread_projects_icon == False and fviewer.unread_projects_count > 0:
 			if fviewer.quit == 0:
-				if sys.platform == 'win32':
-					self.tray.set_from_pixbuf(self.tray_unread_iconbuf)
-				else:
-					self.tray.set_from_icon_name('mail-unread')
+				#if sys.platform == 'win32':
+				#	self.tray.set_from_pixbuf(self.tray_unread_iconbuf)
+				#else:
+				self.tray.set_from_icon_name('mail-unread')
 			self.unread_projects_icon = True
 		if self.unread_projects_icon == True and fviewer.unread_projects_count == 0:
 			self.unread_projects_icon = False

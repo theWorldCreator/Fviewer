@@ -208,6 +208,7 @@ class FviewerDesign:
 		self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
 		# "No connection" tooltip
 		self.tray.set_tooltip('Нет соединения')
+		self.make_icons_grey()
 		self.tray.connect('popup-menu', self.menu_popup, menu)
 		self.tray.connect('activate', self.activate_tray)
 		
@@ -468,7 +469,7 @@ settings = Settings()"""
 					fviewer.unread_projects_count -= 1
 		
 		self.change_icon()
-		self.make_icons_grey(False)
+		self.internet_problems(problems = False)
 		
 		# Present main window, if necessary
 		if settings.new_window:
@@ -478,10 +479,6 @@ settings = Settings()"""
 	
 	
 	def make_icons_grey(self, make_grey = True):
-		"""
-		make_grey is True means losing internet connection
-		make_grey is False means finding it
-		"""
 		if make_grey:
 			self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
 			self.main_window.set_icon(self.tray_pause_iconbuf)
@@ -493,6 +490,19 @@ settings = Settings()"""
 			self.change_icon()
 			self.tray.set_tooltip('FViewer')
 	
+	def internet_problems(self, problems = True):
+		"""
+		problems is True means losing internet connection
+		problems is False means finding it
+		"""
+		if problems and fviewer.internet_problems == 0:
+			# "No connection" tooltip
+			self.tray.set_tooltip('Нет соединения')
+			fviewer.internet_problems = 1
+			self.make_icons_grey(True)
+		if not problems and fviewer.internet_problems == 1:
+			fviewer.internet_problems = 0
+			self.make_icons_grey(False)
 	
 	def money_type_changed(self, widget):
 		"""
@@ -568,9 +578,16 @@ settings = Settings()"""
 	
 	def pause(self, item):
 		fviewer.quit = item.get_active()
-		# "Pause" tooltip
-		self.tray.set_tooltip('Пауза')
-		self.make_icons_grey(fviewer.quit)
+		if fviewer.quit == 1:
+			# "Pause" tooltip
+			self.tray.set_tooltip('Пауза')
+			self.make_icons_grey(True)
+		else:
+			if fviewer.internet_problems == 1:
+				# "No connection" tooltip
+				self.tray.set_tooltip('Нет соединения')
+			if fviewer.internet_problems == 0:
+				self.make_icons_grey(False)
 	
 	def undo_settings(self, widget):
 		self.money_type_widget.set_active(settings.money_type)
@@ -650,13 +667,12 @@ class Fviewer(threading.Thread):
 		
 		def updater(self):
 			"""
-			Main loop fo updating projects info
+			Main loop for updating projects info
 			"""
-			timeout = 1
 			while 1:
 				if self.quit == 2:
 					break
-				if self.quit != 1:
+				if self.quit == 0:
 					timeout = self.get_projects()
 				time.sleep(timeout)
 		
@@ -723,6 +739,7 @@ class Fviewer(threading.Thread):
 			"""
 			if self.id == "-1":
 				if not self.authorization():
+					gobject.idle_add(design.internet_problems)
 					return self.reconnection_timeout
 			
 			
@@ -732,6 +749,7 @@ class Fviewer(threading.Thread):
 				sock.settimeout(self.write_timeout)
 				sock.send(self.id + " " + self.hash + "&")
 			except:
+				gobject.idle_add(design.internet_problems)
 				return self.reconnection_timeout
 			
 			data = self.read_data(sock)

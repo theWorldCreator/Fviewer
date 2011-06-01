@@ -12,11 +12,11 @@ import webkit
 from random import randrange
 
 
-#have_appindicator = True
-#try:
-    #import appindicator
-#except:
-    #have_appindicator = False
+have_appindicator = True
+try:
+	import appindicator
+except:
+	have_appindicator = False
 
 gobject.threads_init()
 
@@ -196,19 +196,28 @@ class FviewerDesign:
 		menu_quit.connect('activate', self.quit)
 		menu.append(menu_quit)
 		
+		menu.show_all()
+		
 		# Tray icon
 		self.tray_iconbuf = gtk.gdk.pixbuf_new_from_file(get_data_file("media", "icon.png"))
 		self.tray_pause_iconbuf = gtk.gdk.pixbuf_new_from_file(get_data_file("media", "tray_pause.png"))
 		
 		# Tray
-		self.tray = gtk.StatusIcon()
+		if have_appindicator:
+			self.tray = appindicator.Indicator("Fviewer", "fviewer", appindicator.CATEGORY_APPLICATION_STATUS)
+			self.tray.set_status (appindicator.STATUS_ACTIVE)
+			self.tray.set_icon(get_data_file("media", "tray_pause.png"))
+			self.tray.set_menu(menu)
+		else:
+			self.tray = gtk.StatusIcon()
+			
+			self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
+			# "No connection" tooltip
+			self.tray.set_tooltip('Нет соединения')
+			self.tray.connect('popup-menu', self.menu_popup, menu)
+			self.tray.connect('activate', self.activate_tray)
 		
-		self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
-		# "No connection" tooltip
-		self.tray.set_tooltip('Нет соединения')
 		self.make_icons_grey()
-		self.tray.connect('popup-menu', self.menu_popup, menu)
-		self.tray.connect('activate', self.activate_tray)
 		
 		
 		self.seing_now_id = 0
@@ -281,12 +290,18 @@ class FviewerDesign:
 				#if sys.platform == 'win32':
 				#	self.tray.set_from_pixbuf(self.tray_unread_iconbuf)
 				#else:
-				self.tray.set_from_icon_name('mail-unread')
+				if have_appindicator:
+					self.tray.set_icon('mail-unread')
+				else:
+					self.tray.set_from_icon_name('mail-unread')
 			self.unread_projects_icon = True
 		if self.unread_projects_icon == True and fviewer.unread_projects_count == 0:
 			self.unread_projects_icon = False
 			if fviewer.quit == 0:
-				self.tray.set_from_pixbuf(self.tray_iconbuf)
+				if have_appindicator:
+					self.tray.set_icon(get_data_file("media", "icon.png"))
+				else:
+					self.tray.set_from_pixbuf(self.tray_iconbuf)
 		
 	def show_next_unread_project(self, open_anyway = False):
 		if (open_anyway or settings.new_window == 1) and fviewer.unread_projects_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
@@ -478,7 +493,10 @@ settings = Settings()"""
 	
 	def make_icons_grey(self, make_grey = True):
 		if make_grey:
-			self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
+			if have_appindicator:
+				self.tray.set_icon(get_data_file("media", "tray_pause.png"))
+			else:
+				self.tray.set_from_pixbuf(self.tray_pause_iconbuf)
 			self.main_window.set_icon(self.tray_pause_iconbuf)
 			self.settings_window.set_icon(self.tray_pause_iconbuf)
 		else:
@@ -486,7 +504,8 @@ settings = Settings()"""
 			self.main_window.set_icon(self.tray_iconbuf)
 			self.settings_window.set_icon(self.tray_iconbuf)
 			self.change_icon()
-			self.tray.set_tooltip('FViewer')
+			if not have_appindicator:
+				self.tray.set_tooltip('FViewer')
 	
 	def internet_problems(self, problems = True):
 		"""
@@ -494,8 +513,9 @@ settings = Settings()"""
 		problems is False means finding it
 		"""
 		if problems and fviewer.internet_problems == 0:
-			# "No connection" tooltip
-			self.tray.set_tooltip('Нет соединения')
+			if not have_appindicator:
+				# "No connection" tooltip
+				self.tray.set_tooltip('Нет соединения')
 			fviewer.internet_problems = 1
 			self.make_icons_grey(True)
 		if not problems and fviewer.internet_problems == 1:
@@ -577,13 +597,15 @@ settings = Settings()"""
 	def pause(self, item):
 		fviewer.quit = item.get_active()
 		if fviewer.quit == 1:
-			# "Pause" tooltip
-			self.tray.set_tooltip('Пауза')
+			if not have_appindicator:
+				# "Pause" tooltip
+				self.tray.set_tooltip('Пауза')
 			self.make_icons_grey(True)
 		else:
 			if fviewer.internet_problems == 1:
-				# "No connection" tooltip
-				self.tray.set_tooltip('Нет соединения')
+				if not have_appindicator:
+					# "No connection" tooltip
+					self.tray.set_tooltip('Нет соединения')
 			if fviewer.internet_problems == 0:
 				self.make_icons_grey(False)
 	
@@ -630,7 +652,10 @@ settings = Settings()"""
 	
 	def quit(self,widget):
 		fviewer.quit = 2
-		self.tray.set_visible(False)
+		if have_appindicator:
+			self.tray.set_status(appindicator.STATUS_PASSIVE)
+		else:
+			self.tray.set_visible(False)
 		self.settings_window.hide()
 		self.main_window.hide()
 		self.dialog.hide()

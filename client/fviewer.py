@@ -41,9 +41,8 @@ def get_data_path():
 
 
 
-client_settings_path = os.getenv("HOME")+'/'	# Folder with client settings
-if os.path.isfile(client_settings_path + ".client_settings.py"):
-	exec compile(open("/home/alex/.client_settings.py", "r").read(), "client_settings", 'exec')
+if os.path.isfile(get_data_file("", ".client_settings.py")):
+	exec compile(open(get_data_file("", ".client_settings.py"), "r").read(), "client_settings", 'exec')
 else:
 	# Default settings
 	class Settings:
@@ -364,7 +363,7 @@ class FviewerDesign:
 				fviewer.id = "-1"
 		
 		# Save new settings
-		open(client_settings_path+'.client_settings.py', 'w').write(
+		open(get_data_file("", ".client_settings.py"), 'w').write(
 """
 class Settings:
 	def __init__(self):

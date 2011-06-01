@@ -637,7 +637,7 @@ class Fviewer(threading.Thread):
 			self.id = "-1"
 			
 			self.HOST = "68.168.113.55"
-			self.PORT = 23252
+			self.PORT = 23143
 			
 			self.projects = []
 			self.projects_count = 0

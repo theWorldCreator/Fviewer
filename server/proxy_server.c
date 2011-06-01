@@ -9,7 +9,7 @@
 
 
 /*
- * Max length of one project: 16384 символов
+ * Max length of one project: 16384 symbols
  * Number of categories: 17
  * 
  */

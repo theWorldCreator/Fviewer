@@ -71,6 +71,10 @@ class FviewerDesign:
 		# settings
 		self.max_projects = 10			# How many projects are shown to user in te list
 		self.X, self.Y = 300, 100
+		self.MAX_LINK_LEN = 50
+		self.MAX_TITLE_LEN = 53
+		self.MAX_BOLD_TITLE_LEN = 50
+		self.MAX_LARGE_TITLE_LEN = 44
 		
 		
 		self.builder = gtk.Builder()
@@ -256,6 +260,8 @@ class FviewerDesign:
 	def change_project_area(self, text, title, link):
 		#self.main_window.move(self.X, self.Y)
 		self.builder.get_object("LinkButton").set_uri(link)
+		if len(link) > self.MAX_LINK_LEN:
+			link = link[:self.MAX_LINK_LEN - 3] + "..."
 		self.builder.get_object("LinkButton").set_label(link)
 		self.main_window.set_title(title)
 		self.project_desc_html.load_string("<html><head><title></title></head><body>" + text + "</body></html>", "text/html", "utf-8", "")
@@ -263,14 +269,30 @@ class FviewerDesign:
 	
 	
 	def show_project(self, index):
+		# Un-italic or un-bold title
+		if self.seing_now_id > 0:
+			for i in range(self.max_projects):
+				if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[self.seing_now_id]['id']:
+					title = fviewer.projects[self.seing_now_id]['title']
+					if len(title) > self.MAX_TITLE_LEN:
+						title = title[:self.MAX_TITLE_LEN - 3] + "..."
+					self.projects_list_buttons[i][0].set_label(title)
+					break
+		
+		
 		self.seing_now_id = index
 		if fviewer.projects[index]["read"] == 0:
 			fviewer.unread_projects_count -= 1
 			fviewer.projects[index]["read"] = 1
-			for i in range(self.max_projects):
-				if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[index]['id']:
-					self.projects_list_buttons[i][0].set_label(fviewer.projects[index]['title'])
-					break
+			
+		# Mark current title
+		for i in range(self.max_projects):
+			if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[index]['id']:
+				title = fviewer.projects[index]['title']
+				if len(title) > self.MAX_LARGE_TITLE_LEN:
+					title = title[:self.MAX_LARGE_TITLE_LEN - 3] + "..."
+				self.projects_list_buttons[i][0].set_markup("<span size = 'larger'>" + title + "</span>")
+				break
 				
 		self.change_icon()
 		self.change_project_area(fviewer.projects[index]["description"], fviewer.projects[index]["title"], fviewer.projects[index]["link"])
@@ -454,10 +476,15 @@ settings = Settings()"""
 			a = len(matched) - 1
 			for i in matched:
 				project = fviewer.projects[i]
+				title = project['title']
 				if project['read'] == 1:
-					self.projects_list_buttons[a][0].set_label(project['title'])
+					if len(title) > self.MAX_TITLE_LEN:
+						title = title[:self.MAX_TITLE_LEN - 3] + "..."
+					self.projects_list_buttons[a][0].set_label(title)
 				else:
-					self.projects_list_buttons[a][0].set_markup("<b>" + project['title'] + "</b>")
+					if len(title) > self.MAX_BOLD_TITLE_LEN:
+						title = title[:self.MAX_BOLD_TITLE_LEN - 3] + "..."
+					self.projects_list_buttons[a][0].set_markup("<b>" + title + "</b>")
 				self.projects_list_buttons[a][1] = project['id']
 				self.projects_list_buttons[a][0].show()
 				a -= 1

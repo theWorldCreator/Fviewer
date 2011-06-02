@@ -9,6 +9,7 @@ from datetime import datetime
 import gtk
 import gst
 import webkit
+from urllib import urlopen
 from random import randrange
 
 
@@ -703,8 +704,10 @@ class Fviewer(threading.Thread):
 			self.last_project_id = -1
 			self.id = "-1"
 			
+			Address_url = "https://github.com/theWorldCreator/Fviewer/raw/master/server/Address"
+			self.HOST, self.PORT = urlopen(Address_url).read().strip().split("\n")
 			self.HOST = "68.168.113.55"
-			self.PORT = 23143
+			self.PORT = int(self.PORT)
 			
 			self.projects = []
 			self.projects_count = 0

@@ -706,7 +706,6 @@ class Fviewer(threading.Thread):
 			
 			Address_url = "https://github.com/theWorldCreator/Fviewer/raw/master/server/Address"
 			self.HOST, self.PORT = urlopen(Address_url).read().strip().split("\n")
-			self.HOST = "68.168.113.55"
 			self.PORT = int(self.PORT)
 			
 			self.projects = []

@@ -354,7 +354,7 @@ class FviewerDesign:
 			self.show_project(a)
 	
 	def to_next_previous_project(self, widget, param):
-		if self.seing_now_id >= 0 and param == -1:
+		if self.seing_now_id > 0 and param == -1:
 			self.X, self.Y = self.main_window.get_position()
 			self.show_project(self.seing_now_id - 1)
 		if self.seing_now_id < (fviewer.projects_count-1) and param == 1:
@@ -705,6 +705,7 @@ class Fviewer(threading.Thread):
 			Address_url = "https://github.com/theWorldCreator/Fviewer/raw/master/server/Address"
 			self.HOST, self.PORT = urlopen(Address_url).read().strip().split("\n")
 			self.PORT = int(self.PORT)
+			#self.HOST = ""
 			
 			self.projects = []
 			self.projects_count = 0

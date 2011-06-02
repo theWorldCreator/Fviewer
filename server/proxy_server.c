@@ -6,16 +6,15 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 
 enum {
 	CATEGORIES_COUNT = 17,
 	MAX_PROJECT_SIZE = 16384,
-	BUFFER_OUT_READ_SIZE = 150		// Must be bigger than any permitted user request
+	BUFFER_OUT_READ_SIZE = 150,		// Must be bigger than any permitted user request
+	READ_SOCKETS_COUNT = 1000			// How many client sockets read simultaneously
 };
-
-
-
 
 
 struct user{
@@ -25,30 +24,29 @@ struct user{
 	short int last_project, last_project_id;
 	int hash;		// User verification, to prevent situation than someone get your projects and get nothing
 };
-struct project{
+struct project {
 	char str[MAX_PROJECT_SIZE];	// JSON with all projects data
 	unsigned short int strlen;
 	unsigned short int money, id;
 	unsigned short int categories[CATEGORIES_COUNT];
 };
-struct read_socket{
+struct read_socket {
 	int fd;
 	char data[BUFFER_OUT_READ_SIZE];
 	unsigned short int data_len;
 };
-//struct write_socket{
-	//int fd;
-	//char data[16384];
-	//unsigned short int data_len;
-	//unsigned int projects[50];
-	//unsigned short int project_to_see;
-//};
 struct link{
 	// Element of linked list with pointer to socket
 	unsigned short int id; // Socket id
 	struct link *prev, *next;
 };
 
+// This variable must be global to provide access to them from SIG_PIPE handle
+int current_socket_ind = -1;
+struct read_socket read_sockets[READ_SOCKETS_COUNT];
+struct link free_read_sockets_chain[READ_SOCKETS_COUNT], *last_free_read_socket, *first_free_read_socket;
+int read_socket_max_fd = -1;
+fd_set master_out_read_set, master_out_write_set;
 
 void error(char *msg)
 {
@@ -59,6 +57,46 @@ void client_error()
     printf("error\n");
 }
 
+void remove_socket(int i) {
+	if(current_socket_ind >= 0) {
+		int fd = read_sockets[i].fd;
+		int j;
+		read_sockets[i].fd = -1;
+		// Remove socket
+		close(fd);
+		FD_CLR(fd, &master_out_read_set);
+		if(read_socket_max_fd == fd){
+			read_socket_max_fd = -1;
+			for(j = 0; j < READ_SOCKETS_COUNT; j++){
+				if(read_sockets[j].fd > read_socket_max_fd) read_socket_max_fd = read_sockets[j].fd;
+			}
+		}
+		// Put freed socket to beginning
+		if((&free_read_sockets_chain[i] != first_free_read_socket) && (&free_read_sockets_chain[i] != last_free_read_socket)){
+			(*free_read_sockets_chain[i].next).prev = free_read_sockets_chain[i].prev;
+			(*free_read_sockets_chain[i].prev).next = free_read_sockets_chain[i].next;
+			free_read_sockets_chain[i].next = first_free_read_socket;
+			free_read_sockets_chain[i].prev = NULL;
+			(*first_free_read_socket).prev = &free_read_sockets_chain[i];
+			first_free_read_socket = &free_read_sockets_chain[i];
+		}
+		if(&free_read_sockets_chain[i] == last_free_read_socket){
+			// If socket not in the middle of the chain, but in the end
+			(*last_free_read_socket).next = first_free_read_socket;
+			(*first_free_read_socket).prev = last_free_read_socket;
+			first_free_read_socket = last_free_read_socket;
+			last_free_read_socket = (*first_free_read_socket).prev;
+			(*first_free_read_socket).prev = NULL;
+			(*last_free_read_socket).next = NULL;
+		}
+	}
+}
+
+void sig_pipe_handler(int signum) {
+	current_socket_ind = -1;
+	remove_socket(current_socket_ind);
+}
+
 int main(int argc, char *argv[])
 {
 	int PORT_IN = 23142;
@@ -66,8 +104,6 @@ int main(int argc, char *argv[])
 	int USERS_COUNT = 1000;		// Information about USERS_COUNT users we will store in memory
 	int PROJECTS_COUNT = 100;
 	int PROJECTS_TO_ONE_USER_COUNT = 30;	// Only PROJECTS_TO_ONE_USER_COUNT projects you can get in one connection
-	int READ_SOCKETS_COUNT = 1000;			// How many client sockets read simultaneously
-	//int WRITE_SOCKETS_COUNT = 100;
 	char *client_end_of_the_string = "&";
 	
 	unsigned short int bool;
@@ -79,8 +115,6 @@ int main(int argc, char *argv[])
 	req.tv_nsec=1000L;
 	
 	
-	struct read_socket read_sockets[READ_SOCKETS_COUNT];
-	struct link free_read_sockets_chain[READ_SOCKETS_COUNT], *last_free_read_socket, *first_free_read_socket;
 	for(i = 0; i < READ_SOCKETS_COUNT; i++) read_sockets[i].fd = -1;
 	first_free_read_socket = &free_read_sockets_chain[0];
 	free_read_sockets_chain[0].id = 0;
@@ -98,29 +132,11 @@ int main(int argc, char *argv[])
 	
 	
 	
-	//struct write_socket write_sockets[WRITE_SOCKETS_COUNT];
-	//struct link free_write_sockets_chain[WRITE_SOCKETS_COUNT], *last_free_write_socket, *first_free_write_socket;
-	//for(i = 0; i < WRITE_SOCKETS_COUNT; i++) write_sockets[i].fd = -1;
-	//first_free_write_socket = &free_write_sockets_chain[0];
-	//free_write_sockets_chain[0].id = 0;
-	//free_write_sockets_chain[0].prev = NULL;
-	//free_write_sockets_chain[0].next = &free_write_sockets_chain[1];
-	//for(i = 1; i < (WRITE_SOCKETS_COUNT-1); i++){
-		//free_write_sockets_chain[i].id = i;
-		//free_write_sockets_chain[i].prev = &free_write_sockets_chain[i-1];
-		//free_write_sockets_chain[i].next = &free_write_sockets_chain[i+1];
-	//}
-	//last_free_write_socket = &free_write_sockets_chain[WRITE_SOCKETS_COUNT-1];
-	//free_write_sockets_chain[WRITE_SOCKETS_COUNT-1].id = WRITE_SOCKETS_COUNT-1;
-	//free_write_sockets_chain[WRITE_SOCKETS_COUNT-1].prev = &free_write_sockets_chain[WRITE_SOCKETS_COUNT-2];
-	//free_write_sockets_chain[WRITE_SOCKETS_COUNT-1].next = NULL;
-	
 	int user_projects[PROJECTS_TO_ONE_USER_COUNT];
 	int last_user_project;
 	
 	
-	int read_socket_max_fd = -1;//, write_socket_max_fd = -1;
-	fd_set master_out_read_set, master_out_write_set, tmp_set;
+	fd_set tmp_set;
 	FD_ZERO(&tmp_set);
 	FD_ZERO(&master_out_read_set);
 	FD_ZERO(&master_out_write_set);
@@ -148,6 +164,7 @@ int main(int argc, char *argv[])
 	int last_project = PROJECTS_COUNT-1;
 	//for(i = 0; i < 17; i++) users[0].categories[i] = 1;
 	
+	signal(SIGPIPE, sig_pipe_handler);
 	
 	
 	struct sockaddr_in serv_in_l, serv_in, serv_out_l, serv_out;
@@ -343,6 +360,7 @@ int main(int argc, char *argv[])
 				if(FD_ISSET(read_sockets[i].fd, &tmp_set)){
 					// Handling request from user
 					handle = 0;
+					current_socket_ind = i;
 					if(read_sockets[i].data_len == 0){
 						len = recv(read_sockets[i].fd, read_sockets[i].data, BUFFER_OUT_READ_SIZE, 0);
 						read_sockets[i].data_len = len;
@@ -407,25 +425,49 @@ int main(int argc, char *argv[])
 									}while(k != last_project);
 								}
 								if(counter == 0){
-									if (send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) error("ERROR writing to socket");
+									if (read_sockets[i].fd >= 0 && send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) {
+										//error("ERROR writing to socket");
+										remove_socket(read_sockets[i].fd);
+										continue;
+									}
 								}else{
 									if(counter <= PROJECTS_TO_ONE_USER_COUNT){
 										for(j = 0; j < counter; j++){
-											if(send(read_sockets[i].fd, projects[user_projects[j]].str, projects[user_projects[j]].strlen, 0) < 0) error("ERROR writing to socket");
+											if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, projects[user_projects[j]].str, projects[user_projects[j]].strlen, 0) < 0) {
+												//error("ERROR writing to socket");
+												remove_socket(read_sockets[i].fd);
+												continue;
+											}
 											//printf("%s%s\n\n", projects[user_projects[j]].str, client_end_of_the_string);
-											if(send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) error("ERROR writing to socket");
+											if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) {
+												//error("ERROR writing to socket");
+												remove_socket(read_sockets[i].fd);
+												continue;
+											}
 										}
 									}else{
 										last_user_project = (last_user_project+1)%PROJECTS_TO_ONE_USER_COUNT;
 										j = last_user_project;
 										do{
-											if(send(read_sockets[i].fd, projects[user_projects[j]].str, projects[user_projects[j]].strlen, 0) < 0) error("ERROR writing to socket");
-											if(send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) error("ERROR writing to socket");
+											if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, projects[user_projects[j]].str, projects[user_projects[j]].strlen, 0) < 0) {
+												//error("ERROR writing to socket");
+												remove_socket(read_sockets[i].fd);
+												break;
+											}
+											if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) {
+												//error("ERROR writing to socket");
+												remove_socket(read_sockets[i].fd);
+												break;
+											}
 											j = (j+1)%PROJECTS_TO_ONE_USER_COUNT;
 										}while(j != last_user_project);
 									}
 								}
-								if(send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) error("ERROR writing to socket");
+								if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, client_end_of_the_string, 1, 0) < 0) {
+									//error("ERROR writing to socket");
+									remove_socket(read_sockets[i].fd);
+									continue;
+								}
 								//fprintf(fh, "%s", client_end_of_the_string);
 								users[id].last_project = last_project;
 								users[id].last_project_id = projects[users[id].last_project].id;
@@ -434,7 +476,7 @@ int main(int argc, char *argv[])
 								//printf("e:1|%d||%d||%d|\n", id, hash, users[id].hash);
 							}
 						}
-						if(read_sockets[i].data_len > 12 && read_sockets[i].data_len <= BUFFER_OUT_READ_SIZE){
+						if(read_sockets[i].fd >= 0 && read_sockets[i].data_len > 12 && read_sockets[i].data_len <= BUFFER_OUT_READ_SIZE){
 							// New user
 							error_id = 0;	// Everything is good
 							//printf("new user, '%s'", read_sockets[i].data);
@@ -469,7 +511,11 @@ int main(int argc, char *argv[])
 									memcpy(&(users[first_user]), &tmp_user, user_size);
 									sprintf(read_sockets[i].data, "%d%s%s", first_user, client_end_of_the_string, client_end_of_the_string);
 									//printf("out: %s|%d||%d|\n", read_sockets[i].data, tmp_user.hash, users[first_user].hash);
-									if(send(read_sockets[i].fd, read_sockets[i].data, strlen(read_sockets[i].data), 0) < 0) error("ERROR writing to socket");
+									if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, read_sockets[i].data, strlen(read_sockets[i].data), 0) < 0) {
+										//error("ERROR writing to socket");
+										remove_socket(read_sockets[i].fd);
+										continue;
+									}
 								}else{
 									error_id = 1;	// Wrong request
 									//client_error();
@@ -482,41 +528,14 @@ int main(int argc, char *argv[])
 							}
 						}
 						if(error_id == 1){
-							if(send(read_sockets[i].fd, "Wrong userid", 12, 0) < 0) error("ERROR writing to socket");
+							if(read_sockets[i].fd >= 0) send(read_sockets[i].fd, "Wrong userid", 12, 0);
 						}
 						if(error_id == 2){
-							if(send(read_sockets[i].fd, "Wrong data", 10, 0) < 0) error("ERROR writing to socket");
+							if(read_sockets[i].fd >= 0) send(read_sockets[i].fd, "Wrong data", 10, 0);
 						}
-						// Remove reading socket
-						close(read_sockets[i].fd);
-						FD_CLR(read_sockets[i].fd, &master_out_read_set);
-						if(read_socket_max_fd == read_sockets[i].fd){
-							read_socket_max_fd = -1;
-							for(j = 0; j < READ_SOCKETS_COUNT; j++){
-								if(read_sockets[j].fd > read_socket_max_fd) read_socket_max_fd = read_sockets[j].fd;
-							}
-						}
-						// Put freed socket to beginning
-						if((&free_read_sockets_chain[i] != first_free_read_socket) && (&free_read_sockets_chain[i] != last_free_read_socket)){
-							(*free_read_sockets_chain[i].next).prev = free_read_sockets_chain[i].prev;
-							(*free_read_sockets_chain[i].prev).next = free_read_sockets_chain[i].next;
-							free_read_sockets_chain[i].next = first_free_read_socket;
-							free_read_sockets_chain[i].prev = NULL;
-							(*first_free_read_socket).prev = &free_read_sockets_chain[i];
-							first_free_read_socket = &free_read_sockets_chain[i];
-						}
-						if(&free_read_sockets_chain[i] == last_free_read_socket){
-							// If socket not in the middle of the chain, but in the end
-							(*last_free_read_socket).next = first_free_read_socket;
-							(*first_free_read_socket).prev = last_free_read_socket;
-							first_free_read_socket = last_free_read_socket;
-							last_free_read_socket = (*first_free_read_socket).prev;
-							(*first_free_read_socket).prev = NULL;
-							(*last_free_read_socket).next = NULL;
-						}
-						read_sockets[i].fd = -1;
-						////printf(" 6\n");
+						remove_socket(i);
 					}
+					current_socket_ind = -1;
 				}
 			}
 		}

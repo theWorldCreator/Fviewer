@@ -225,7 +225,7 @@ class FviewerDesign:
 		self.make_icons_grey()
 		
 		
-		self.seing_now_id = 0
+		self.seing_now_id = -1
 		self.unread_projects_icon = False
 		self.now_searching = False
 		self.now_paused = False
@@ -271,7 +271,7 @@ class FviewerDesign:
 	
 	def show_project(self, index):
 		# Un-italic or un-bold title
-		if self.seing_now_id > 0:
+		if self.seing_now_id >= 0:
 			for i in range(self.max_projects):
 				if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[self.seing_now_id]['id']:
 					title = fviewer.projects[self.seing_now_id]['title']
@@ -354,7 +354,7 @@ class FviewerDesign:
 			self.show_project(a)
 	
 	def to_next_previous_project(self, widget, param):
-		if self.seing_now_id > 0 and param == -1:
+		if self.seing_now_id >= 0 and param == -1:
 			self.X, self.Y = self.main_window.get_position()
 			self.show_project(self.seing_now_id - 1)
 		if self.seing_now_id < (fviewer.projects_count-1) and param == 1:

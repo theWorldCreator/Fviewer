@@ -55,7 +55,7 @@ while 1:
 			id = get_id.search(guid).group(1)
 			
 			try:
-				now_timestamp = mktime(strptime(message.find('pubDate').text, "%a, %d %b %Y %H:%M:%S +0400"))
+				now_timestamp = mktime(strptime(message.find('pubDate').text, "%a, %d %b %Y %H:%M:%S"))
 			except ValueError:
 				log_fh = open("parse_server_log", "a+")
 				log_fh.write("Couldn't parse time string -- '" + message.find('pubDate').text + "'\n")

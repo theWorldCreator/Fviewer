@@ -17,8 +17,10 @@ PORT = 23142
 
 url = "http://www.flance.ru/rss.xml"
 get_id = re.compile(r"^.*project(\d+)$")
-get_tags = re.compile(r"<a[^>]*>([^<]+)</a>")
-zero_money = re.compile(r"^ *0[^0-1]")
+get_tags = re.compile(ur"<a[^>]*>([^<]+)</a>")
+get_money1 = re.compile(ur"^ *<b class=\"black\"> *([0-9]+) *</b> *(\$|€|FM|руб) *</div>")
+get_money2 = re.compile(ur"^ *<b class=\"black\"> *\(Бюджет: *([0-9]+) *(\$|€|FM|руб)\) *</b> *</div>")
+zero_money = re.compile(ur"^ *0[^0-9]")
 
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -90,44 +92,50 @@ while 1:
 		url_tmp = download_stek[0][0]
 		id = download_stek[0][1]
 		try:
-			result = urllib2.urlopen(url_tmp).read()
+			result = urllib2.urlopen(url_tmp).read().decode("utf-8")
 			# Parse budget
-			next = result.find('middleSide')
+			next = result.find(u'middleSide')
 			result = result[next:]
-			next = result.find('Бюджет:')
+			next = result.find(u'Бюджет:')
 			if next > 0:
 				result = result[next+7:]
-				next = result.find('Бюджет:')
-				if next > 0:
-					fh = open("log_to_budjet", "a+")
-					fh.write(url_tmp+"\n")
-					fh.close()
-					#result = result[next+7:]
-					#next = result.find(')')
-					#money = result[0:next].strip().replace('  ',' ').split(' ')
-					#money_int = int(money[1])
-					#money_type = money[2].replace(' ','')
-				else:
-					if zero_money.match(result) is None:
-						next = result.find('>')
-						result = result[next+1:]
-						next = result.find('<')
-						try:
-							money_int = int(result[0:next])
-							next = result.find('>')
-							result = result[next+1:]
-							next = result.find('<')
-							money_type = result[0:next].replace(' ','')
-						except:
-							money_int = 0
-							money_type = ''
+				money_str = result[:100]
+				#get_money1
+				#next = result.find('Бюджет:')
+				#if next > 0:
+					#fh = open("log_to_budjet", "a+")
+					#fh.write("Duble budget " + url_tmp + "\n")
+					#fh.close()
+					##result = result[next+7:]
+					##next = result.find(')')
+					##money = result[0:next].strip().replace('  ',' ').split(' ')
+					##money_int = int(money[1])
+					##money_type = money[2].replace(' ','')
+				##else:
+				money_str = money_str.replace(u"&euro;", u"€")
+				money_str = money_str.replace(u"&#x0024;", u"$")
+				if zero_money.match(money_str) is None:
+					money = get_money1.match(money_str)
+					if money is not None:
+						money_int = int(money.group(1))
+						money_type = money.group(2).encode("utf-8")
 					else:
-						money_int = 0
-						# Default is rubbles
-						money_type = 'руб'
+						money = get_money2.match(money_str)
+						if money is not None:
+							money_int = int(money.group(1))
+							money_type = money.group(2).encode("utf-8")
+						else:
+							fh = open("parse_server_log", "a+")
+							fh.write("Can not parse budget " + url_tmp + "\n")
+							fh.close()
+							money_int = 0
+							# Default is rubbles
+							money_type = 'руб'
+				else:
+					money_int = 0
+					# Default is rubbles
+					money_type = 'руб'
 				
-				money_type = money_type.replace("&euro;", "€")
-				money_type = money_type.replace("&#x0024;", "$")
 				
 				try:
 					money_int *= money_rate[money_type]
@@ -141,25 +149,25 @@ while 1:
 				all_projects[id]['money'] = 0
 			
 			# Parse categories
-			next = result.find('class="tags"')
+			next = result.find(u'class="tags"')
 			result = result[next:]
-			next = result.find(':')
+			next = result.find(u':')
 			result = result[next+1:]
-			next = result.find('</div>')
+			next = result.find(u'</div>')
 			tags = result[0:next].strip()
 			tags = get_tags.findall(tags)
 			all_projects[id]['categ'] = []
 			for tag in tags:
 				try:
-					all_projects[id]['categ'].append(tags_arr[tag.decode('utf-8')])
+					all_projects[id]['categ'].append(tags_arr[tag])
 				except KeyError:
 					log_fh = open("parse_server_log", "a+")
-					log_fh.write("Unknown category: '" + tag.decode('utf-8') + "' in " + url_tmp + "\n")
+					log_fh.write("Unknown category: '" + tag.encode('utf-8') + "' in " + url_tmp + "\n")
 					log_fh.close()
 			all_projects[id]['categ'].insert(0, len(all_projects[id]['categ']))
 			
 			# Parse link
-			next = result.find('class="infopanel"')
+			next = result.find(u'class="infopanel"')
 			if next > 0:
 				result = result[next:]
 				#next = result.find('alt=\'')
@@ -170,15 +178,15 @@ while 1:
 					#all_projects[id]['sait'] = saits_arr[sait.decode('utf-8')]
 				#except KeyError:
 					#print "Ou NO!!!"# write in to log
-				next = result.find('<a')
+				next = result.find(u'<a')
 				result = result[next:]
-				next = result.find('href')
+				next = result.find(u'href')
 				result = result[next:]
-				next = result.find('"')
+				next = result.find(u'"')
 				result = result[next+1:]
-				next = result.find('"')
+				next = result.find(u'"')
 				link = result[0:next].strip()
-				all_projects[id]['link'] = link.decode('utf-8')
+				all_projects[id]['link'] = link.encode('utf-8')
 			else:
 				all_projects[id]['link'] = url_tmp
 			all_projects[id]['parsed'] = 1

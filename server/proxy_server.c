@@ -8,11 +8,11 @@
 #include <time.h>
 
 
-/*
- * Max length of one project: 16384 symbols
- * Number of categories: 17
- * 
- */
+enum {
+	CATEGORIES_COUNT = 17,
+	MAX_PROJECT_SIZE = 16384,
+	BUFFER_OUT_READ_SIZE = 150		// Must be bigger than any permitted user request
+};
 
 
 
@@ -20,20 +20,20 @@
 
 struct user{
 	short int min_money, max_money;		// Money range, in rubbles
-	unsigned short int categories[17];
+	unsigned short int categories[CATEGORIES_COUNT];
 	short int without_money;			// Is client accept projects without specified budget
 	short int last_project, last_project_id;
 	int hash;		// User verification, to prevent situation than someone get your projects and get nothing
 };
 struct project{
-	char str[16384];	// JSON with all projects data
+	char str[MAX_PROJECT_SIZE];	// JSON with all projects data
 	unsigned short int strlen;
 	unsigned short int money, id;
-	unsigned short int categories[17];
+	unsigned short int categories[CATEGORIES_COUNT];
 };
 struct read_socket{
 	int fd;
-	char data[150];
+	char data[BUFFER_OUT_READ_SIZE];
 	unsigned short int data_len;
 };
 //struct write_socket{
@@ -68,9 +68,6 @@ int main(int argc, char *argv[])
 	int PROJECTS_TO_ONE_USER_COUNT = 30;	// Only PROJECTS_TO_ONE_USER_COUNT projects you can get in one connection
 	int READ_SOCKETS_COUNT = 1000;			// How many client sockets read simultaneously
 	//int WRITE_SOCKETS_COUNT = 100;
-	int MAX_PROJECT_SIZE = 16384;
-	int BUFFER_OUT_READ_SIZE = 150;			// Must be bigger than any permitted user request
-	int CATEGORIES_COUNT = 17;				// It's necessary to change this number not only here, but in struct user и struct project, if new categories appear
 	char *client_end_of_the_string = "&";
 	
 	unsigned short int bool;

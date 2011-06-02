@@ -355,13 +355,11 @@ class FviewerDesign:
 	
 	def to_next_previous_project(self, widget, param):
 		if self.seing_now_id > 0 and param == -1:
-			self.seing_now_id -= 1
 			self.X, self.Y = self.main_window.get_position()
-			self.show_project(self.seing_now_id)
+			self.show_project(self.seing_now_id - 1)
 		if self.seing_now_id < (fviewer.projects_count-1) and param == 1:
-			self.seing_now_id += 1
 			self.X, self.Y = self.main_window.get_position()
-			self.show_project(self.seing_now_id)
+			self.show_project(self.seing_now_id + 1)
 	
 	
 	def settings_window_save(self):

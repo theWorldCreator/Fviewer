@@ -93,8 +93,8 @@ void remove_socket(int i) {
 }
 
 void sig_pipe_handler(int signum) {
-	current_socket_ind = -1;
 	remove_socket(current_socket_ind);
+	current_socket_ind = -1;
 }
 
 int main(int argc, char *argv[])

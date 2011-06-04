@@ -105,6 +105,7 @@ class FviewerDesign:
 		
 		dic = { "search_projects" : self.show_projects_list,
 			"hot_key" : self.hot_key,
+			"projects_list_scroll" : self.projects_list_scroll,
 			"main_window_close" : self.main_window_close }
 		self.builder.connect_signals(dic)
 		
@@ -238,7 +239,12 @@ class FviewerDesign:
 		
 		# updating settings window
 		self.undo_settings(0)
-		
+	
+	def projects_list_scroll(self, widget, scroll_type):
+		if scroll_type.direction == gtk.gdk.SCROLL_UP:
+			self.to_next_previous_project('', -1)
+		else:
+			self.to_next_previous_project('', 1)
 	
 	def hot_key(self, widget, key):
 		if key.keyval == 65363:

@@ -57,6 +57,7 @@
                     <property name="can_focus">True</property>
                     <property name="hscrollbar_policy">never</property>
                     <property name="vscrollbar_policy">automatic</property>
+                    <signal name="scroll-event" handler="projects_list_scroll" swapped="no"/>
                     <child>
                       <object class="GtkViewport" id="viewport1">
                         <property name="visible">True</property>

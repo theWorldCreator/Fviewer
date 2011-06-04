@@ -61,6 +61,7 @@ void remove_socket(int i) {
 	if(current_socket_ind >= 0) {
 		int fd = read_sockets[i].fd;
 		int j;
+		struct link *currient;
 		read_sockets[i].fd = -1;
 		// Remove socket
 		close(fd);
@@ -71,23 +72,24 @@ void remove_socket(int i) {
 				if(read_sockets[j].fd > read_socket_max_fd) read_socket_max_fd = read_sockets[j].fd;
 			}
 		}
+		currient = &free_read_sockets_chain[i];
 		// Put freed socket to beginning
-		if((&free_read_sockets_chain[i] != first_free_read_socket) && (&free_read_sockets_chain[i] != last_free_read_socket)){
-			(*free_read_sockets_chain[i].next).prev = free_read_sockets_chain[i].prev;
-			(*free_read_sockets_chain[i].prev).next = free_read_sockets_chain[i].next;
-			free_read_sockets_chain[i].next = first_free_read_socket;
-			free_read_sockets_chain[i].prev = NULL;
-			(*first_free_read_socket).prev = &free_read_sockets_chain[i];
-			first_free_read_socket = &free_read_sockets_chain[i];
+		if((currient != first_free_read_socket) && (&free_read_sockets_chain[i] != last_free_read_socket)){
+			currient->next->prev = currient->prev;
+			currient->prev->next = currient->next;
+			currient->next = first_free_read_socket;
+			currient->prev = NULL;
+			first_free_read_socket->prev = currient;
+			first_free_read_socket = currient;
 		}
-		if(&free_read_sockets_chain[i] == last_free_read_socket){
+		if(currient == last_free_read_socket){
 			// If socket not in the middle of the chain, but in the end
-			(*last_free_read_socket).next = first_free_read_socket;
-			(*first_free_read_socket).prev = last_free_read_socket;
+			last_free_read_socket->next = first_free_read_socket;
+			first_free_read_socket->prev = last_free_read_socket;
 			first_free_read_socket = last_free_read_socket;
-			last_free_read_socket = (*first_free_read_socket).prev;
-			(*first_free_read_socket).prev = NULL;
-			(*last_free_read_socket).next = NULL;
+			last_free_read_socket = first_free_read_socket->prev;
+			first_free_read_socket->prev = NULL;
+			last_free_read_socket->next = NULL;
 		}
 	}
 }
@@ -106,13 +108,13 @@ int main(int argc, char *argv[])
 	int PROJECTS_TO_ONE_USER_COUNT = 30;	// Only PROJECTS_TO_ONE_USER_COUNT projects you can get in one connection
 	char *client_end_of_the_string = "&";
 	
-	unsigned short int bool;
+	int bool;
 	int len, i, j, k, counter, id, hash, sock, error_id, is_slash_was_last, count_projects_in_buffer, handle;
 	int buffer_in_len = 0;
 	int user_size = sizeof(struct user);
 	struct timespec req = {0},rem = {0};
 	req.tv_sec = 0;
-	req.tv_nsec=1000L;
+	req.tv_nsec = 1000L;
 	
 	
 	for(i = 0; i < READ_SOCKETS_COUNT; i++) read_sockets[i].fd = -1;
@@ -202,7 +204,7 @@ int main(int argc, char *argv[])
 	serv_out_len = sizeof(serv_out);
 	
 	
-	while(1) {
+	for(;;) {
 		FD_ZERO(&tmp_set);
 		FD_SET(sockfd_in, &tmp_set);
 		if (select(sockfd_in+1, &tmp_set, NULL, NULL, &tv)){

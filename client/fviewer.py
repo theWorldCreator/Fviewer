@@ -90,7 +90,7 @@ class Projects:
 		project = self.current()
 		self.current_real_id = project['id']
 		if project['read'] == 0:
-			fviewer.unread_projects_count -= 1
+			#fviewer.unread_projects_count -= 1
 			self.unread_count -= 1
 			fviewer.projects[project['project_id']]['read'] = 1
 	
@@ -98,13 +98,6 @@ class Projects:
 		return self.get(self.current_id)
 	
 	def update(self):
-		# Make "read" mark for outdated projects
-		if self.unread_count > design.max_projects:
-			for i in range(self.unread_count - design.max_projects):
-				if fviewer.projects[i]["read"] == 0:
-					fviewer.projects[i]["read"] = 1
-					fviewer.unread_projects_count -= 1
-		
 		# Update current_id
 		i = 0
 		while i < fviewer.projects_count and fviewer.projects[i]['id'] != self.current_real_id:
@@ -133,6 +126,15 @@ class Projects:
 				self.current_id = self.count - 1
 				design.update_status_bar(self.current_id)
 		
+		# Make "read" mark for outdated projects
+		if self.count > design.max_projects:
+			for i in range(self.count - design.max_projects):
+				if self.get(i)['read'] == 0:
+					fviewer.projects[self.get(i)['project_id']]['read'] = 1
+					#fviewer.unread_projects_count -= 1
+					self.unread_count -= 1
+	
+	
 	def button_id(self, index):
 		"""
 		If project with id = index is one of the last self.max_projects projects => return index of button, else return negative value
@@ -395,7 +397,7 @@ class FviewerDesign:
 			self.playbin.set_state(gst.STATE_PLAYING)
 		
 	def change_icon(self):
-		if self.unread_projects_icon == False and fviewer.unread_projects_count > 0:
+		if self.unread_projects_icon == False and projects.unread_count > 0:
 			if fviewer.quit == 0:
 				#if sys.platform == 'win32':
 				#	self.tray.set_from_pixbuf(self.tray_unread_iconbuf)
@@ -405,7 +407,7 @@ class FviewerDesign:
 				else:
 					self.tray.set_from_icon_name('mail-unread')
 			self.unread_projects_icon = True
-		if self.unread_projects_icon == True and fviewer.unread_projects_count == 0:
+		if self.unread_projects_icon == True and projects.unread_count == 0:
 			self.unread_projects_icon = False
 			if fviewer.quit == 0:
 				if have_appindicator:
@@ -677,7 +679,7 @@ settings = Settings()"""
 		if response_id == 2:
 			for i in range(fviewer.projects_count):
 				fviewer.projects[i]["read"] = 1
-			fviewer.unread_projects_count = 0
+			#fviewer.unread_projects_count = 0
 			projects.unread_count = 0
 			self.change_icon()
 		
@@ -730,7 +732,7 @@ settings = Settings()"""
 	def main_window_close(self, widget, event, suggest_dialog = True):
 		self.X, self.Y = self.main_window.get_position()
 		self.main_window.hide()
-		if suggest_dialog and settings.new_window == 1 and fviewer.unread_projects_count > 0:
+		if suggest_dialog and settings.new_window == 1 and projects.unread_count > 0:
 			if self.dialog_last_answer == 0:
 				self.dialog.present()
 			else:
@@ -771,7 +773,7 @@ class Fviewer(threading.Thread):
 			
 			self.projects = []
 			self.projects_count = 0
-			self.unread_projects_count = 0
+			#self.unread_projects_count = 0
 			self.internet_problems = 1		# No connection before we try to find it
 			self.quit = 0					# 0 -- normal work, 1 - pause, 2 - quit
 		
@@ -822,7 +824,7 @@ class Fviewer(threading.Thread):
 		def authorization(self):
 			self.projects = []
 			self.projects_count = 0
-			self.unread_projects_count = 0
+			#self.unread_projects_count = 0
 			
 			self.id = "-1"
 			self.hash = str(randrange(10000, 100000))
@@ -885,7 +887,7 @@ class Fviewer(threading.Thread):
 						project['description'] = project['description'].replace("\r\n", "<br />").replace("\n", "<br />").replace("\r", "<br />")
 						
 						self.projects.append(project)
-						self.unread_projects_count += 1
+						#self.unread_projects_count += 1
 						if self.projects_count >= self.max_projects:
 							self.projects.pop(0)
 						else:

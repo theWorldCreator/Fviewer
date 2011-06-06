@@ -94,7 +94,6 @@ class Projects:
 			self.unread_count -= 1
 			fviewer.projects[project['project_id']]['read'] = 1
 	
-	
 	def current(self):
 		return self.get(self.current_id)
 	
@@ -134,16 +133,28 @@ class Projects:
 				self.current_id = self.count - 1
 				design.update_status_bar(self.current_id)
 		
-
 	def button_id(self, index):
 		"""
 		If project with id = index is one of the last self.max_projects projects => return index of button, else return negative value
 		"""
 		if index < 0:
 			return -1
-		if projects.count >= design.max_projects:
-			return index - projects.count + design.max_projects
+		if self.count >= design.max_projects:
+			return index - self.count + design.max_projects
 		return index
+			
+	def first_unread_id(self):
+		if self.unread_count == 0:
+			# Let's show first project list item
+			if self.count >= design.max_projects:
+				return self.count - design.max_projects
+			else:
+				return 0
+		i = 0
+		while i < self.count and self.get(i)['read']:
+			i += 1
+		return i
+
 
 class FviewerDesign:
 	def __init__(self):
@@ -305,6 +316,7 @@ class FviewerDesign:
 		
 		
 		#self.seing_now_id = -1
+		self.first_run = True
 		self.unread_projects_icon = False
 		self.now_searching = False
 		self.now_paused = False
@@ -351,7 +363,6 @@ class FviewerDesign:
 		self.builder.get_object("LinkButton").set_label(link)
 		self.main_window.set_title(title)
 		self.project_desc_html.load_string("<html><head><title></title></head><body>" + text + "</body></html>", "text/html", "utf-8", "")
-		self.main_window.present()
 	
 	
 	def show_project(self, index):
@@ -404,10 +415,8 @@ class FviewerDesign:
 		
 	def show_next_unread_project(self, open_anyway = False):
 		if (open_anyway or settings.new_window == 1) and projects.unread_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
-			i = 0
-			while i < projects.count and fviewer.projects[projects.get(i)['project_id']]["read"]:
-				i += 1
-			self.show_project(i)
+			self.show_project(projects.first_unread_id())
+			self.main_window.present()
 	
 	def open_project_from_list(self, widget, key, i):
 		self.X, self.Y = self.main_window.get_position()
@@ -567,6 +576,10 @@ settings = Settings()"""
 			self.show_next_unread_project()
 		else:
 			self.update_projects_list()
+			if self.first_run:
+				# If client do not main window to be opened than new projects appears, let's set project which he sees as open main window manually
+				self.first_run = False
+				self.show_project(projects.first_unread_id())
 	
 	
 	def make_icons_grey(self, make_grey = True):

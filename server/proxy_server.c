@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
 			buffer_in[buffer_in_len] = '\0';
 			tmp = buffer_in;
 			if(count_projects_in_buffer > 0) {
-				while(count_projects_in_buffer > 0){
+				while(count_projects_in_buffer > 0) {
 					last_project = (last_project + 1) % PROJECTS_COUNT;
 					
 					len = separators_buffer_in[separators_buffer_in_start + 2] - separators_buffer_in[separators_buffer_in_start + 1] - 1; // Length of json part

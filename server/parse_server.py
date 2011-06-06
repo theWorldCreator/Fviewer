@@ -204,7 +204,7 @@ while 1:
 				json.loads(json.dumps(all_projects[id]))
 			except:
 				fh = open("json_problems", "a+")
-				fh.write(tmp+"\n")
+				fh.write(tmp + "\n")
 				fh.close()
 			sock.send(tmp)
 			#fh = open("bad_projects3", "a+")
@@ -220,6 +220,10 @@ while 1:
 			last_send_id += 1
 		else:
 			break
+	
+	fh = open("parse_dump", "a+")
+	fh.write(str(last_send_id) + "\n")
+	fh.close()
 	
 	sleep(update_interval)
 	

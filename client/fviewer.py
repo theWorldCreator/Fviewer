@@ -132,10 +132,18 @@ class Projects:
 			
 			if current_fviewer_id == i:
 				self.current_id = self.count - 1
-		print self.current_id
-
+				design.update_status_bar(self.current_id)
 		
 
+	def button_id(self, index):
+		"""
+		If project with id = index is one of the last self.max_projects projects => return index of button, else return negative value
+		"""
+		if index < 0:
+			return -1
+		if projects.count >= design.max_projects:
+			return index - projects.count + design.max_projects
+		return index
 
 class FviewerDesign:
 	def __init__(self):
@@ -348,22 +356,20 @@ class FviewerDesign:
 	
 	def show_project(self, index):
 		# Un-italic or un-bold previous title
-		print projects.current_id
-		if projects.current_id >= 0 and 'button_id' in projects.current():
-			#print self.seing_now_id
-			#print self.matched_projects[self.seing_now_id]
+		if projects.button_id(projects.current_id) >= 0:
 			title = projects.current()['title']
 			if len(title) > self.MAX_TITLE_LEN:
 				title = title[:self.MAX_TITLE_LEN - 3] + "..."
-			self.projects_list_buttons[projects.current()['button_id']][0].set_label(get_usual_title(title))
+			self.projects_list_buttons[projects.button_id(projects.current_id)][0].set_label(get_usual_title(title))
 		
 		projects.set(index)
 		project = projects.current()
 		project_id = project['project_id']
 			
 		# Mark current title
-		if 'button_id' in project:
-			self.projects_list_buttons[project['button_id']][0].set_markup(get_current_title(project['title']))
+		if projects.button_id(index) >= 0:
+			# If project with id = index is one of the last self.max_projects projects
+			self.projects_list_buttons[projects.button_id(index)][0].set_markup(get_current_title(project['title']))
 				
 		self.change_icon()
 		self.change_project_area(project["description"], project["title"], project["link"])
@@ -405,7 +411,6 @@ class FviewerDesign:
 	
 	def open_project_from_list(self, widget, key, i):
 		self.X, self.Y = self.main_window.get_position()
-		#print self.projects_list_buttons[i][1]
 		self.show_project(self.projects_list_buttons[i][1])
 	
 	def to_next_previous_project(self, widget, direction):
@@ -514,7 +519,7 @@ settings = Settings()"""
 			start = projects.count - self.max_projects
 		for ind in range(start, projects.count):
 			project = projects.get(ind)
-			projects.matched[ind]['button_id'] = a
+			#projects.matched[ind]['button_id'] = a
 			title = project['title']
 			if project['read'] == 1:
 				if ind == projects.current_id:
@@ -525,7 +530,6 @@ settings = Settings()"""
 				self.projects_list_buttons[a][0].set_markup(get_unread_title(title))
 			
 			self.projects_list_buttons[a][1] = ind
-			#print self.projects_list_buttons[a][1]
 			self.projects_list_buttons[a][0].show()
 			a += 1
 		if projects.count < self.max_projects:

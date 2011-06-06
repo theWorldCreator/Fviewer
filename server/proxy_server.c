@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
 	char *client_end_of_the_string = "&";
 	
 	int bool;
-	int len, i, j, k, counter, id, hash, sock, error_id, is_slash_was_last, count_projects_in_buffer, handle;
+	int len, i, j, k, counter, id, hash, sock, error_id, is_slash_was_last, count_projects_in_buffer, handle, prev_len;
 	int buffer_in_len = 0;
 	int user_size = sizeof(struct user);
 	struct timespec req = {0},rem = {0};
@@ -373,10 +373,11 @@ int main(int argc, char *argv[])
 					}else{
 						len = recv(read_sockets[i].fd, tmp_buffer, BUFFER_OUT_READ_SIZE-read_sockets[i].data_len, 0);
 						handle = 0;
+						prev_len = read_sockets[i].data_len;
 						for(k = 0; k < len; k++){
 							if(tmp_buffer[k] == '&')
 								handle = 1;
-							read_sockets[i].data[read_sockets[i].data_len+k] = tmp_buffer[k];
+							read_sockets[i].data[prev_len + k] = tmp_buffer[k];
 						}
 						read_sockets[i].data_len += len;
 					}

@@ -67,6 +67,76 @@ money_types = [u'$', u'€', u'руб', u'FM']
 # ToDo: get this values from the internet
 int_money_coefficient = [28.06, 40.24, 1, 30.0]		# FM is internal currency for free-lance.ru
 
+class Projects:
+	def __init__(self):
+		self.current_id = -1
+		self.current_real_id = -1
+		self.unread_count = 0
+		self.count = 0
+		self.matched = []
+		
+		self.update()
+	
+	def get(self, pr_id):
+		if pr_id == -1 or self.matched[pr_id] == -1:
+			return None
+		fv_id = self.matched[pr_id]['project_id']
+		project = fviewer.projects[fv_id]
+		project.update(self.matched[pr_id])
+		return project
+		
+	def set(self, pr_id):
+		self.current_id = pr_id
+		project = self.current()
+		self.current_real_id = project['id']
+		if project['read'] == 0:
+			fviewer.unread_projects_count -= 1
+			self.unread_count -= 1
+			fviewer.projects[project['project_id']]['read'] = 1
+	
+	
+	def current(self):
+		return self.get(self.current_id)
+	
+	def update(self):
+		# Make "read" mark for outdated projects
+		if self.unread_count > design.max_projects:
+			for i in range(self.unread_count - design.max_projects):
+				if fviewer.projects[i]["read"] == 0:
+					fviewer.projects[i]["read"] = 1
+					fviewer.unread_projects_count -= 1
+		
+		# Update current_id
+		i = 0
+		while i < fviewer.projects_count and fviewer.projects[i]['id'] != self.current_real_id:
+			i += 1
+		if i < fviewer.projects_count:
+			current_fviewer_id = i
+		else:
+			current_fviewer_id = -1
+		
+		
+		self.unread_count = 0
+		self.current_id = -1
+		self.count = 0
+		self.matched = []
+		for i in range(fviewer.projects_count):
+			project = fviewer.projects[i]
+			if design.now_searching:
+				if unicode(project['title']).lower().find(design.now_search_text) == -1 and unicode(project['description']).lower().find(design.now_search_text) == -1:
+					continue
+			if not project['read']:
+				self.unread_count += 1
+			self.count += 1
+			self.matched.append({'project_id': i})
+			
+			if current_fviewer_id == i:
+				self.current_id = self.count - 1
+		print self.current_id
+
+		
+
+
 class FviewerDesign:
 	def __init__(self):
 		# settings
@@ -103,7 +173,7 @@ class FviewerDesign:
 		
 		
 		
-		dic = { "search_projects" : self.show_projects_list,
+		dic = { "search_projects" : self.update_projects_list,
 			"hot_key" : self.hot_key,
 			"projects_list_scroll" : self.projects_list_scroll,
 			"main_window_close" : self.main_window_close }
@@ -187,7 +257,7 @@ class FviewerDesign:
 		
 		# List of project menu item
 		menu_item = gtk.MenuItem('Список проектов')
-		menu_item.connect('activate', self.show_projects_list, 0, 1)
+		menu_item.connect('activate', self.show_projects_list)
 		menu.append(menu_item)
 		
 		# Pause menu item
@@ -226,7 +296,7 @@ class FviewerDesign:
 		self.make_icons_grey()
 		
 		
-		self.seing_now_id = -1
+		#self.seing_now_id = -1
 		self.unread_projects_icon = False
 		self.now_searching = False
 		self.now_paused = False
@@ -243,7 +313,7 @@ class FviewerDesign:
 	def projects_list_scroll(self, widget, scroll_type):
 		if scroll_type.direction == gtk.gdk.SCROLL_UP:
 			self.to_next_previous_project('', -1)
-		else:
+		elif scroll_type.direction == gtk.gdk.SCROLL_DOWN:
 			self.to_next_previous_project('', 1)
 	
 	def hot_key(self, widget, key):
@@ -254,8 +324,9 @@ class FviewerDesign:
 			# left button
 			self.to_next_previous_project('', -1)
 		
-	def update_status_bar(self, project):
-		now_id = self.seing_now_id+1
+	def update_status_bar(self, project_id):
+		project = projects.get(project_id)#fviewer.projects[self.matched_projects[project_id]['project_id']]
+		now_id = project['project_id'] + 1
 		if now_id >= 1:
 			now_id = str(now_id)
 		else:
@@ -276,34 +347,27 @@ class FviewerDesign:
 	
 	
 	def show_project(self, index):
-		# Un-italic or un-bold title
-		if self.seing_now_id >= 0:
-			for i in range(self.max_projects):
-				if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[self.seing_now_id]['id']:
-					title = fviewer.projects[self.seing_now_id]['title']
-					if len(title) > self.MAX_TITLE_LEN:
-						title = title[:self.MAX_TITLE_LEN - 3] + "..."
-					self.projects_list_buttons[i][0].set_label(title)
-					break
+		# Un-italic or un-bold previous title
+		print projects.current_id
+		if projects.current_id >= 0 and 'button_id' in projects.current():
+			#print self.seing_now_id
+			#print self.matched_projects[self.seing_now_id]
+			title = projects.current()['title']
+			if len(title) > self.MAX_TITLE_LEN:
+				title = title[:self.MAX_TITLE_LEN - 3] + "..."
+			self.projects_list_buttons[projects.current()['button_id']][0].set_label(get_usual_title(title))
 		
-		
-		self.seing_now_id = index
-		if fviewer.projects[index]["read"] == 0:
-			fviewer.unread_projects_count -= 1
-			fviewer.projects[index]["read"] = 1
+		projects.set(index)
+		project = projects.current()
+		project_id = project['project_id']
 			
 		# Mark current title
-		for i in range(self.max_projects):
-			if (1 in self.projects_list_buttons[i]) and self.projects_list_buttons[i][1] == fviewer.projects[index]['id']:
-				title = fviewer.projects[index]['title']
-				if len(title) > self.MAX_LARGE_TITLE_LEN:
-					title = title[:self.MAX_LARGE_TITLE_LEN - 3] + "..."
-				self.projects_list_buttons[i][0].set_markup("<span size = 'larger'>" + title + "</span>")
-				break
+		if 'button_id' in project:
+			self.projects_list_buttons[project['button_id']][0].set_markup(get_current_title(project['title']))
 				
 		self.change_icon()
-		self.change_project_area(fviewer.projects[index]["description"], fviewer.projects[index]["title"], fviewer.projects[index]["link"])
-		self.update_status_bar(fviewer.projects[index])
+		self.change_project_area(project["description"], project["title"], project["link"])
+		self.update_status_bar(index)
 		self.project_desc_html.grab_focus()
 	
 	
@@ -333,39 +397,24 @@ class FviewerDesign:
 					self.tray.set_from_pixbuf(self.tray_iconbuf)
 		
 	def show_next_unread_project(self, open_anyway = False):
-		if (open_anyway or settings.new_window == 1) and fviewer.unread_projects_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
-			
-			if self.max_projects < fviewer.projects_count:
-				count = self.max_projects
-			else:
-				count = fviewer.projects_count
-			for i in range(fviewer.projects_count-count, fviewer.projects_count):
-				if fviewer.projects[i]["read"] == 0:
-					self.show_project(i)
-					break
+		if (open_anyway or settings.new_window == 1) and projects.unread_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
+			i = 0
+			while i < projects.count and fviewer.projects[projects.get(i)['project_id']]["read"]:
+				i += 1
+			self.show_project(i)
 	
 	def open_project_from_list(self, widget, key, i):
 		self.X, self.Y = self.main_window.get_position()
-		id = self.projects_list_buttons[i][1]
-		project_obj = ''
-		a = 0
-		
-		for project in fviewer.projects:
-			if project['id'] == id:
-				project_obj = project
-				break
-			a += 1
-		
-		if project_obj != '':
-			self.show_project(a)
+		#print self.projects_list_buttons[i][1]
+		self.show_project(self.projects_list_buttons[i][1])
 	
-	def to_next_previous_project(self, widget, param):
-		if self.seing_now_id > 0 and param == -1:
+	def to_next_previous_project(self, widget, direction):
+		if projects.current_id > 0 and direction == -1:
 			self.X, self.Y = self.main_window.get_position()
-			self.show_project(self.seing_now_id - 1)
-		if self.seing_now_id < (fviewer.projects_count-1) and param == 1:
+			self.show_project(projects.current_id - 1)
+		if projects.current_id < (projects.count - 1) and direction == 1:
 			self.X, self.Y = self.main_window.get_position()
-			self.show_project(self.seing_now_id + 1)
+			self.show_project(projects.current_id + 1)
 	
 	
 	def settings_window_save(self):
@@ -376,13 +425,11 @@ class FviewerDesign:
 		if settings.money_type != self.money_type_widget.get_active():	# Currency was changed
 			settings.money_type = self.money_type_widget.get_active()
 			# Updating status string for each project
-			i = 0
-			for project in fviewer.projects:
-				fviewer.projects[i]['status_str'] = get_project_status_str(project)
-				i += 1
+			for i in range(fviewer.projects_count):
+				fviewer.projects[i]['status_str'] = get_project_status_str(fviewer.projects[i])
 			# Uodating string in status bar for current project
-			if self.seing_now_id >= 0:
-				self.update_status_bar(fviewer.projects[self.seing_now_id])
+			if projects.current_id >= 0:
+				self.update_status_bar(projects.current_id)
 		status = self.settings_window_changed()
 		if status > 0:
 			settings.min_money = to_another_money_type(self.minimum_money_entry.get_text(), settings.money_type, 2)
@@ -445,82 +492,77 @@ settings = Settings()"""
 		return 0
 	
 	
-	def show_projects_list(self, widget, key, need_in_open = False):
-		if need_in_open == True or self.main_window.get_property('visible'):
-			if key != 0:
-				if self.builder.get_object("SearchEntry").get_text() != self.now_search_text:
-					text = self.builder.get_object("SearchEntry").get_text()
-					if text == '':
-						self.now_searching = False
-						self.now_search_text = ''
-					else:
-						self.now_searching = True
-						self.now_search_text = unicode(text).lower()
+	def update_projects_list(self, widget = None, key = 0):
+		if key != 0:
+			if self.builder.get_object("SearchEntry").get_text() != self.now_search_text:
+				text = self.builder.get_object("SearchEntry").get_text()
+				if text == '':
+					self.now_searching = False
+					self.now_search_text = ''
 				else:
-					return False
-			list_not_full = fviewer.projects_count < self.max_projects
-			if list_not_full:
-				start = 0
-				end = self.max_projects
+					self.now_searching = True
+					self.now_search_text = unicode(text).lower()
 			else:
-				start = fviewer.projects_count - self.max_projects
-				end = fviewer.projects_count
-			a = 0
-			matched = []
-			for i in range(end-1, -1, -1):
-				if a >= self.max_projects:
-					break
-				if i > (fviewer.projects_count-1):
-					continue
-				project = fviewer.projects[i]
-				if self.now_searching:
-					if unicode(project['title']).lower().find(self.now_search_text) == -1 and unicode(project['description']).lower().find(self.now_search_text) == -1:
-						continue
-				matched.append(i)
-				a += 1
-			a = len(matched) - 1
-			for i in matched:
-				project = fviewer.projects[i]
-				title = project['title']
-				if project['read'] == 1:
-					if len(title) > self.MAX_TITLE_LEN:
-						title = title[:self.MAX_TITLE_LEN - 3] + "..."
-					self.projects_list_buttons[a][0].set_label(title)
+				return False
+		
+		projects.update()
+		
+		a = 0
+		if projects.count < self.max_projects:
+			start = 0
+		else:
+			start = projects.count - self.max_projects
+		for ind in range(start, projects.count):
+			project = projects.get(ind)
+			projects.matched[ind]['button_id'] = a
+			title = project['title']
+			if project['read'] == 1:
+				if ind == projects.current_id:
+					self.projects_list_buttons[a][0].set_markup(get_current_title(title))
 				else:
-					if len(title) > self.MAX_BOLD_TITLE_LEN:
-						title = title[:self.MAX_BOLD_TITLE_LEN - 3] + "..."
-					self.projects_list_buttons[a][0].set_markup("<b>" + title + "</b>")
-				self.projects_list_buttons[a][1] = project['id']
-				self.projects_list_buttons[a][0].show()
-				a -= 1
-			if len(matched) < self.max_projects:
-				if len(matched) == 0:
-					self.builder.get_object("ProjectsListNothingSearched").show()
-				for i in range(len(matched), self.max_projects):
-					self.projects_list_buttons[i][0].hide()
-			if len(matched) > 0:
-				self.builder.get_object("ProjectsListNothingSearched").hide()
-						
-			if self.main_window.get_property('visible') == False:
-				self.main_window.present()
+					self.projects_list_buttons[a][0].set_label(get_usual_title(title))
+			else:
+				self.projects_list_buttons[a][0].set_markup(get_unread_title(title))
+			
+			self.projects_list_buttons[a][1] = ind
+			#print self.projects_list_buttons[a][1]
+			self.projects_list_buttons[a][0].show()
+			a += 1
+		if projects.count < self.max_projects:
+			if projects.count == 0:
+				self.builder.get_object("ProjectsListNothingSearched").show()
+			for i in range(projects.count, self.max_projects):
+				self.projects_list_buttons[i][0].hide()
+		if projects.count > 0:
+			self.builder.get_object("ProjectsListNothingSearched").hide()
+	
+	
+	def show_projects_list(self, widget = None):
+		self.update_projects_list(widget)
+		self.main_window.present()
+		if self.main_window.get_property('visible') == False:
 			self.main_window.move(self.X, self.Y)
 	
+	
 	def update_from_core_thread(self):
-		# Make "read" mark for outdated projects 
-		if fviewer.unread_projects_count > self.max_projects:
-			for i in range(fviewer.projects_count - self.max_projects):
-				if fviewer.projects[i]["read"] == 0:
-					fviewer.projects[i]["read"] = 1
-					fviewer.unread_projects_count -= 1
+		global projects
+		if projects is None:
+			# First run
+			projects = Projects()
+		projects.update()
 		
 		self.change_icon()
 		self.internet_problems(problems = False)
 		
 		# Present main window, if necessary
 		if settings.new_window:
-			self.show_projects_list('', key = 0, need_in_open = True)
-			self.main_window_close('', 0, suggest_dialog = False)
+			if self.main_window.get_property('visible'):
+				self.show_projects_list()
+			else:
+				self.update_projects_list()
 			self.show_next_unread_project()
+		else:
+			self.update_projects_list()
 	
 	
 	def make_icons_grey(self, make_grey = True):
@@ -577,7 +619,7 @@ settings = Settings()"""
 				self.X, self.Y = self.main_window.get_position()
 				self.main_window.hide()
 			else:
-				self.show_projects_list(0, 0, 1)
+				self.show_projects_list()
 		else:
 			if self.main_window.get_property('visible'):
 				self.X, self.Y = self.main_window.get_position()
@@ -616,13 +658,10 @@ settings = Settings()"""
 		if response_id == 1:
 			self.show_next_unread_project()
 		if response_id == 2:
-			if self.max_projects < fviewer.projects_count:
-				count = self.max_projects
-			else:
-				count = fviewer.projects_count
 			for i in range(fviewer.projects_count):
 				fviewer.projects[i]["read"] = 1
 			fviewer.unread_projects_count = 0
+			projects.unread_count = 0
 			self.change_icon()
 		
 	
@@ -711,6 +750,7 @@ class Fviewer(threading.Thread):
 			Address_url = "https://github.com/theWorldCreator/Fviewer/raw/master/server/Address"
 			self.HOST, self.PORT = urlopen(Address_url).read().strip().split("\n")
 			self.PORT = int(self.PORT)
+			#self.HOST = ""
 			
 			self.projects = []
 			self.projects_count = 0
@@ -843,7 +883,6 @@ class Fviewer(threading.Thread):
 					prev = next + 1
 				if added:
 					gobject.idle_add(design.play_audio_notification)
-					gobject.idle_add(design.change_icon)
 					gobject.idle_add(design.update_from_core_thread)
 			return self.update_timeout
 
@@ -891,6 +930,23 @@ def get_project_status_str(project):
 		project['status_str'] = project['status_str'][:-2]
 	return project['status_str']
 
+
+def get_usual_title(title):
+	if len(title) > design.MAX_TITLE_LEN:
+		title = title[:design.MAX_TITLE_LEN - 3] + "..."
+	return title
+
+def get_current_title(title):
+	if len(title) > design.MAX_LARGE_TITLE_LEN:
+		title = title[:design.MAX_LARGE_TITLE_LEN - 3] + "..."
+	return "<span size = 'larger'>" + title + "</span>"
+
+def get_unread_title(title):
+	if len(title) > design.MAX_BOLD_TITLE_LEN:
+		title = title[:design.MAX_BOLD_TITLE_LEN - 3] + "..."
+	return "<b>" + title + "</b>"
+
+projects = None
 design = FviewerDesign()
 fviewer = Fviewer()
 fviewer.start()

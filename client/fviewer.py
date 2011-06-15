@@ -74,8 +74,6 @@ class Projects:
 		self.unread_count = 0
 		self.count = 0
 		self.matched = []
-		
-		self.update()
 	
 	def get(self, pr_id):
 		if pr_id == -1 or self.matched[pr_id] == -1:
@@ -560,10 +558,6 @@ settings = Settings()"""
 	
 	
 	def update_from_core_thread(self):
-		global projects
-		if projects is None:
-			# First run
-			projects = Projects()
 		projects.update()
 		
 		self.change_icon()
@@ -965,9 +959,9 @@ def get_unread_title(title):
 		title = title[:design.MAX_BOLD_TITLE_LEN - 3] + "..."
 	return "<b>" + title + "</b>"
 
-projects = None
 design = FviewerDesign()
 fviewer = Fviewer()
+projects = Projects()
 fviewer.start()
 
 gtk.main()

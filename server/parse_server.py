@@ -5,15 +5,14 @@ from xml.etree import ElementTree as ET
 import urllib2
 import re
 from time import mktime, strptime, sleep
-import socket, json
+import json
+import posix_ipc
+import mmap
 
 tags_arr = {u'Дизайн': 0, u'Программирование': 1, u'Веб-строй': 2, u'Раскрутка': 3, u'Тексты и переводы': 4, u'Верстка': 5, u'Flash': 6, u'Логотипы': 7, u'Иллюстрации': 8, u'3D': 9, u'Аудио/Видео': 10, u'Иконки': 11, u'Разное': 12, u'Фото': 13, u'Консалтинг': 14, u'Маркетинг': 15, u'Администрирование': 16,}
 #saits_arr = {u'flance.ru': 0, u'free-lance.ru': 1, u'weblancer.net': 2, u'freelancejob.ru': 3, u'freelance.ru': 4, u'free-lancers.net': 5, u'dalance.ru': 6, u'netlancer.ru': 7, u'vingrad.ru': 8, u'best-lance.ru': 9, u'free-lancing.ru': 10, u'freelance.tomsk.ru': 11, u'freelancehunt.com': 12, u'webfreelance.ru': 13, u'virtuzor.ru': 14, u'revolance.ru': 15, u'freelancerbay.com': 16, u'flance_ru.livejournal.com': 17, u'podrabotka.livejournal.com': 18, u'ru_freelance.livejournal.com': 19, u'ru_perevod4ik.livejournal.com': 20, u'ydalen_ru.livejournal.com': 21,}
 money_rate = {"$": 30, "€": 40, "FM": 35, "руб": 1}
 
-# Separator between field is symbol "&", end of the string -- ";"
-
-PORT = 23142
 
 url = "http://www.flance.ru/rss.xml"
 get_id = re.compile(r"^.*project(\d+)$")
@@ -23,8 +22,9 @@ get_money2 = re.compile(ur"^ *<b class=\"black\"> *\(Бюджет: *([0-9]+) *(\
 zero_money = re.compile(ur"^ *0[^0-9]")
 
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.connect(("", PORT))
+sem = posix_ipc.Semaphore("/fviewer_projects_semaphore")
+shm = posix_ipc.SharedMemory("fviewer_projects_shared_memory")
+shared_memory = mmap.mmap(shm.fd, 0)
 
 
 update_interval = 15
@@ -41,8 +41,8 @@ maked_first = maked_size-1
 my_id = 0
 last_send_id = -1
 
-def escape_str(string):
-	return string.replace("&", "\\&").replace(";", "\\;")
+#def escape_str(string):
+#	return string.replace("&", "\\&").replace(";", "\\;")
 
 while 1:
 	try:
@@ -76,7 +76,7 @@ while 1:
 				all_projects[my_id]['description'] = message.find('description').text
 				all_projects[my_id]['pubDate'] = now_timestamp
 				all_projects[my_id]['parsed'] = 0
-				all_projects[my_id]['id'] = my_id
+				#all_projects[my_id]['id'] = my_id
 			
 				download_stek.append([guid, my_id])
 				download_stek_size += 1
@@ -164,7 +164,7 @@ while 1:
 					log_fh = open("parse_server_log", "a+")
 					log_fh.write("Unknown category: '" + tag.encode('utf-8') + "' in " + url_tmp + "\n")
 					log_fh.close()
-			all_projects[id]['categ'].insert(0, len(all_projects[id]['categ']))
+			#all_projects[id]['categ'].insert(0, len(all_projects[id]['categ']))
 			
 			# Parse link
 			next = result.find(u'class="infopanel"')
@@ -199,14 +199,31 @@ while 1:
 	for id in range(last_send_id+1, my_id):
 		if all_projects[id]['parsed'] == 1:
 			del all_projects[id]['parsed']
-			tmp = str(id) + '&' + escape_str(json.dumps(all_projects[id])) + '&' + str(all_projects[id]['money']) + '&' + json.dumps(all_projects[id]['categ']) + ';'
+			#tmp = str(id) + '&' + escape_str(json.dumps(all_projects[id])) + '&' + str(all_projects[id]['money']) + '&' + json.dumps(all_projects[id]['categ']) + ';'
 			try:
 				json.loads(json.dumps(all_projects[id]))
 			except:
 				fh = open("json_problems", "a+")
-				fh.write(tmp + "\n")
+				fh.write(json.dumps(all_projects[id]) + "\n")
 				fh.close()
-			sock.send(tmp)
+			
+			# Whait free shared memory
+			while True:
+				sem.acquire()
+				if shared_memory[0] != '{':
+					break
+				else:
+					sem.release()
+			data = json.dumps(all_projects[id])
+			shared_memory[0:len(data)] = data
+			#print data
+			#print "\n\n"
+			shared_memory[len(data)] = '\0'
+			# Unlock semaphore
+			sem.release()
+			
+			
+			
 			#fh = open("bad_projects3", "a+")
 			#fh.write(tmp+"\n\n\n")
 			#fh.close()

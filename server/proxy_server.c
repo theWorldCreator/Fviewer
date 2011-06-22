@@ -30,9 +30,11 @@ const char SHARED_MEMORY_OBJECT_NAME[] = "fviewer_projects_shared_memory";
 
 
 struct _projects {
-	int start; // First project element in the array
+	int start;	// First project element in the array
 	int end;
 	int count;
+	int now;	// Project used now by the user queries handler
+	sem_t *sem;	// Semaphore for organized access to projects
 	struct project *arr;
 };
 
@@ -63,14 +65,14 @@ struct link{
 	struct link *prev, *next;
 };
 
-// This variable must be global to provide access to them from SIG_PIPE handle or from getting_projects thread
+// This variable must be global to provide access to them from SIG_PIPE handler or from getting_projects thread
 int current_socket_ind = -1;
 struct read_socket read_sockets[READ_SOCKETS_COUNT];
 struct link free_read_sockets_chain[READ_SOCKETS_COUNT], *last_free_read_socket, *first_free_read_socket;
 int read_socket_max_fd = -1;
 fd_set master_out_read_set, master_out_write_set;
 struct _projects projects;
-int new_project_id = 0;
+int project_now_id = -1;
 
 void error(char *msg)
 {
@@ -137,11 +139,12 @@ void *getting_projects( void *arg) {
 	 * 
 	 */
 	 
-	 sem_t *sem;
-	 int shm;
-	 char *new_project, *tmp, *next, *next_virgule;
-	 int current_id, i, cat_id, start_len, value;
-	 struct project *current;
+	sem_t *sem;
+	int shm;
+	char *new_project, *tmp, *next, *next_virgule;
+	int current_id, i, cat_id, start_len, value;
+	int new_project_id = 0;
+	struct project *current;
 	
 	// Create shared memory object
 	if ( (shm = shm_open(SHARED_MEMORY_OBJECT_NAME, O_CREAT|O_RDWR, 0777)) == -1 ) {
@@ -171,6 +174,7 @@ void *getting_projects( void *arg) {
 		sem_post(sem);
 		value++;
 	}
+	
 	// By default no data in shared memory
 	new_project[0] = '\0';
 	
@@ -182,9 +186,13 @@ void *getting_projects( void *arg) {
 			// There are new project
 			if(projects.count == MAX_PROJECTS_COUNT) {
 				// Delete oldest project in list
-				// FIXME if someone use projects.start now, wait him
 				current_id = projects.start;
+				sem_wait(projects.sem);
+				while(projects.now == current_id)
+					usleep(10);
 				projects.start = (projects.start + 1) % MAX_PROJECTS_COUNT;
+				projects.arr[current_id].id = -2; // To be shure that no one will get this project until we update it in full
+				sem_post(projects.sem);
 				projects.count--;
 			} else if(projects.count == 0) {
 				projects.end = -1;
@@ -240,7 +248,6 @@ void *getting_projects( void *arg) {
 			current->id = new_project_id++;
 			projects.end = (projects.end + 1) % MAX_PROJECTS_COUNT;
 			projects.count++;
-			//printf("End adding proj\n");
 		} else {
 			// Unlock shared memory
 			sem_post(sem);
@@ -298,6 +305,10 @@ int main(int argc, char *argv[])
 	projects.start = 0;
 	projects.end = 0;
 	projects.count = 0;
+	projects.sem = (sem_t *) malloc(sizeof(sem_t));
+    if (sem_init(projects.sem, 0, 1) < 0) {
+		perror("sem_init");
+	}
 	
 	//users[0].min_money = 0;
 	//users[0].max_money = 0;
@@ -429,10 +440,14 @@ int main(int argc, char *argv[])
 							}
 							
 							if((id >= 0) && (id < USERS_COUNT) && (hash == users[id].hash)) {
+								sem_wait(projects.sem);
+								projects.now = users[id].last_project + 1;
 								if(projects.arr[users[id].last_project].id != users[id].last_project_id){
 									// User last request was too long ago, we don't have so old projects
+									projects.now = projects.start;
 									users[id].last_project = projects.start - 1;
 								}
+								sem_post(projects.sem);
 								counter = 0;
 								//printf("t %d %d\n", users[id].last_project, projects.end);
 								if(users[id].last_project != projects.end) {

@@ -41,9 +41,6 @@ maked_first = maked_size-1
 my_id = 0
 last_send_id = -1
 
-#def escape_str(string):
-#	return string.replace("&", "\\&").replace(";", "\\;")
-
 while 1:
 	try:
 		result = urllib2.urlopen(url)

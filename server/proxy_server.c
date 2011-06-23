@@ -24,8 +24,8 @@ enum {
 	LISTEN_BACKLOG = 5,
 	MAX_PROJECTS_COUNT = 100
 };
-const char SEMAPHORE_NAME[] = "/fviewer_projects_semaphore";
-const char SHARED_MEMORY_OBJECT_NAME[] = "fviewer_projects_shared_memory";
+char *SEMAPHORE_NAME = NULL;//[40];// = "/fviewer_projects_semaphore2";
+char *SHARED_MEMORY_OBJECT_NAME = NULL;//[40];// = "fviewer_projects_shared_memory2";
 
 
 
@@ -252,6 +252,7 @@ void *getting_projects( void *arg) {
 			// Unlock shared memory
 			sem_post(sem);
 		}
+		usleep(1);
 	}
 }
 
@@ -262,12 +263,32 @@ int main(int argc, char *argv[])
 	int PROJECTS_TO_ONE_USER_COUNT = 30;	// Only PROJECTS_TO_ONE_USER_COUNT projects you can get in one connection
 	
 	int bool;
-	int len, i, j, k, counter, id, hash, sock, error_id, handle, prev_len, cat_id;
+	int len, i, j, k, counter, id, hash, sock, error_id, handle, prev_len, cat_id, wrong_arg;
 	pthread_t thread;
 	int user_size = sizeof(struct user);
-	struct timespec req = {0},rem = {0};
-	req.tv_sec = 0;
-	req.tv_nsec = 1000L;
+	
+	wrong_arg = 0;
+	for(i = 1; i < argc; i++) {
+		if(strcmp("-p", argv[i]) == 0 || strcmp("--port", argv[i]) == 0) {
+			sscanf(argv[i + 1], "%d", &PORT_OUT);
+			i++;
+		} else if(strcmp("--semaphore", argv[i]) == 0) {
+			SEMAPHORE_NAME = argv[i + 1];
+			i++;
+		} else if(strcmp("--shared_memory", argv[i]) == 0) {
+			SHARED_MEMORY_OBJECT_NAME = argv[i + 1];
+			i++;
+		} else {
+			wrong_arg = 1;
+		}
+	}
+	if(wrong_arg || SEMAPHORE_NAME == NULL || SHARED_MEMORY_OBJECT_NAME == NULL) {
+		printf("Arguments:\n");
+		printf("	-p, --port         specific out port\n");
+		printf("	--semaphore        semaphore name\n");
+		printf("	--shared_memory    shared memory name\n");
+		return 0;
+	}
 	
 	
 	for(i = 0; i < READ_SOCKETS_COUNT; i++) read_sockets[i].fd = -1;
@@ -310,17 +331,7 @@ int main(int argc, char *argv[])
 		perror("sem_init");
 	}
 	
-	//users[0].min_money = 0;
-	//users[0].max_money = 0;
-	//users[0].without_money = 1;
-	//users[0].categories[0] = 1;
-	//users[0].categories[1] = 1;
-	//users[0].last_project = MAX_PROJECTS_COUNT;
-	//users[0].last_project_id = 0;
-	//users[0].hash = 12345;
 	int first_user = USERS_COUNT-1;
-	//int last_project = PROJECTS_COUNT-1;
-	//for(i = 0; i < 17; i++) users[0].categories[i] = 1;
 	
 	signal(SIGPIPE, sig_pipe_handler);
 	
@@ -616,7 +627,7 @@ int main(int argc, char *argv[])
 				}
 			}
 		}
-		nanosleep(&req,&rem);
+		usleep(1);
 	}
 	close(sockfd_out);
 	

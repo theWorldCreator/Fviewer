@@ -8,6 +8,7 @@ from time import mktime, strptime, sleep
 import json
 import posix_ipc
 import mmap
+import sys
 
 tags_arr = {u'Дизайн': 0, u'Программирование': 1, u'Веб-строй': 2, u'Раскрутка': 3, u'Тексты и переводы': 4, u'Верстка': 5, u'Flash': 6, u'Логотипы': 7, u'Иллюстрации': 8, u'3D': 9, u'Аудио/Видео': 10, u'Иконки': 11, u'Разное': 12, u'Фото': 13, u'Консалтинг': 14, u'Маркетинг': 15, u'Администрирование': 16,}
 #saits_arr = {u'flance.ru': 0, u'free-lance.ru': 1, u'weblancer.net': 2, u'freelancejob.ru': 3, u'freelance.ru': 4, u'free-lancers.net': 5, u'dalance.ru': 6, u'netlancer.ru': 7, u'vingrad.ru': 8, u'best-lance.ru': 9, u'free-lancing.ru': 10, u'freelance.tomsk.ru': 11, u'freelancehunt.com': 12, u'webfreelance.ru': 13, u'virtuzor.ru': 14, u'revolance.ru': 15, u'freelancerbay.com': 16, u'flance_ru.livejournal.com': 17, u'podrabotka.livejournal.com': 18, u'ru_freelance.livejournal.com': 19, u'ru_perevod4ik.livejournal.com': 20, u'ydalen_ru.livejournal.com': 21,}
@@ -22,8 +23,27 @@ get_money2 = re.compile(ur"^ *<b class=\"black\"> *\(Бюджет: *([0-9]+) *(\
 zero_money = re.compile(ur"^ *0[^0-9]")
 
 
-sem = posix_ipc.Semaphore("/fviewer_projects_semaphore")
-shm = posix_ipc.SharedMemory("fviewer_projects_shared_memory")
+semaphore_name = shared_memory_name = None
+wrong_arg = False
+i = 1
+while i < len(sys.argv):
+	if sys.argv[i] == "--semaphore":
+		semaphore_name = sys.argv[i + 1]
+		i += 1
+	elif sys.argv[i] == "--shared_memory":
+		shared_memory_name = sys.argv[i + 1];
+		i += 1
+	else:
+		wrong_arg = True
+	i += 1
+if wrong_arg or semaphore_name is None or shared_memory_name is None:
+	print "Arguments:"
+	print "	-semaphore        semaphore name"
+	print "	-shared_memory    shared memory name"
+	sys.exit()
+		
+sem = posix_ipc.Semaphore(semaphore_name)
+shm = posix_ipc.SharedMemory(shared_memory_name)
 shared_memory = mmap.mmap(shm.fd, 0)
 
 

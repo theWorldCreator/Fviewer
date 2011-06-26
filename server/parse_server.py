@@ -12,7 +12,7 @@ import sys
 
 tags_arr = {u'Дизайн': 0, u'Программирование': 1, u'Веб-строй': 2, u'Раскрутка': 3, u'Тексты и переводы': 4, u'Верстка': 5, u'Flash': 6, u'Логотипы': 7, u'Иллюстрации': 8, u'3D': 9, u'Аудио/Видео': 10, u'Иконки': 11, u'Разное': 12, u'Фото': 13, u'Консалтинг': 14, u'Маркетинг': 15, u'Администрирование': 16,}
 #saits_arr = {u'flance.ru': 0, u'free-lance.ru': 1, u'weblancer.net': 2, u'freelancejob.ru': 3, u'freelance.ru': 4, u'free-lancers.net': 5, u'dalance.ru': 6, u'netlancer.ru': 7, u'vingrad.ru': 8, u'best-lance.ru': 9, u'free-lancing.ru': 10, u'freelance.tomsk.ru': 11, u'freelancehunt.com': 12, u'webfreelance.ru': 13, u'virtuzor.ru': 14, u'revolance.ru': 15, u'freelancerbay.com': 16, u'flance_ru.livejournal.com': 17, u'podrabotka.livejournal.com': 18, u'ru_freelance.livejournal.com': 19, u'ru_perevod4ik.livejournal.com': 20, u'ydalen_ru.livejournal.com': 21,}
-money_rate = {"$": 30, "€": 40, "FM": 35, "руб": 1}
+money_rate = {u"$": 30, u"€": 40, u"FM": 35, u"руб": 1}
 
 
 url = "http://www.flance.ru/rss.xml"
@@ -62,9 +62,19 @@ my_id = 0
 last_send_id = -1
 
 while 1:
+	cont = True
 	try:
 		result = urllib2.urlopen(url)
-		handl = ET.parse(result)
+	except:
+		# Internet problems
+		cont = False
+	if cont:
+		try:
+			handl = ET.parse(result)
+		except:
+			# Damaged XML
+			cont = False
+	if cont:
 		messages = handl.findall("channel/item")
 		messages.reverse()
 		for message in messages:
@@ -99,120 +109,116 @@ while 1:
 				download_stek_size += 1
 				last_timestamp = now_timestamp
 				my_id += 1
-	except urllib2.URLError, e:
-		# Internet problems
-		pass
-	except xml.etree.ElementTree.ParseError:
-		# Damaged XML
-		pass
+	
 	for i in range(download_stek_size):
 		url_tmp = download_stek[0][0]
 		id = download_stek[0][1]
 		try:
 			result = urllib2.urlopen(url_tmp).read().decode("utf-8")
-			# Parse budget
-			next = result.find(u'middleSide')
-			result = result[next:]
-			next = result.find(u'Бюджет:')
-			if next > 0:
-				result = result[next+7:]
-				money_str = result[:100]
-				#get_money1
-				#next = result.find('Бюджет:')
-				#if next > 0:
-					#fh = open("log_to_budjet", "a+")
-					#fh.write("Duble budget " + url_tmp + "\n")
-					#fh.close()
-					##result = result[next+7:]
-					##next = result.find(')')
-					##money = result[0:next].strip().replace('  ',' ').split(' ')
-					##money_int = int(money[1])
-					##money_type = money[2].replace(' ','')
-				##else:
-				money_str = money_str.replace(u"&euro;", u"€")
-				money_str = money_str.replace(u"&#x0024;", u"$")
-				if zero_money.match(money_str) is None:
-					money = get_money1.match(money_str)
+		except:
+			# Internet problems
+			break
+		
+		# Parse budget
+		next = result.find(u'middleSide')
+		result = result[next:]
+		next = result.find(u'Бюджет:')
+		if next > 0:
+			result = result[next+7:]
+			money_str = result[:100]
+			#get_money1
+			#next = result.find('Бюджет:')
+			#if next > 0:
+				#fh = open("log_to_budjet", "a+")
+				#fh.write("Duble budget " + url_tmp + "\n")
+				#fh.close()
+				##result = result[next+7:]
+				##next = result.find(')')
+				##money = result[0:next].strip().replace('  ',' ').split(' ')
+				##money_int = int(money[1])
+				##money_type = money[2].replace(' ','')
+			##else:
+			money_str = money_str.replace(u"&euro;", u"€")
+			money_str = money_str.replace(u"&#x0024;", u"$")
+			if zero_money.match(money_str) is None:
+				money = get_money1.match(money_str)
+				if money is not None:
+					money_int = int(money.group(1))
+					money_type = money.group(2)
+				else:
+					money = get_money2.match(money_str)
 					if money is not None:
 						money_int = int(money.group(1))
-						money_type = money.group(2).encode("utf-8")
+						money_type = money.group(2)
 					else:
-						money = get_money2.match(money_str)
-						if money is not None:
-							money_int = int(money.group(1))
-							money_type = money.group(2).encode("utf-8")
-						else:
-							fh = open("parse_server_log", "a+")
-							fh.write("Can not parse budget " + url_tmp + "\n")
-							fh.close()
-							money_int = 0
-							# Default is rubbles
-							money_type = 'руб'
-				else:
-					money_int = 0
-					# Default is rubbles
-					money_type = 'руб'
-				
-				
-				try:
-					money_int *= money_rate[money_type]
-				except KeyError:
-					log_fh = open("parse_server_log", "a+")
-					log_fh.write("Unknown currency: '" + money_type + "' in " + url_tmp + "\n")
-					log_fh.close()
-					money_int = 0
-				all_projects[id]['money'] = money_int
+						fh = open("parse_server_log", "a+")
+						fh.write("Can not parse budget " + url_tmp + "\n")
+						fh.close()
+						money_int = 0
+						# Default is rubbles
+						money_type = u'руб'
 			else:
-				all_projects[id]['money'] = 0
+				money_int = 0
+				# Default is rubbles
+				money_type = u'руб'
 			
-			# Parse categories
-			next = result.find(u'class="tags"')
+			
+			try:
+				money_int *= money_rate[money_type]
+			except KeyError:
+				log_fh = open("parse_server_log", "a+")
+				log_fh.write("Unknown currency: '" + money_type.encode("utf-8") + "' in " + url_tmp + "\n")
+				log_fh.close()
+				money_int = 0
+			all_projects[id]['money'] = money_int
+		else:
+			all_projects[id]['money'] = 0
+		
+		# Parse categories
+		next = result.find(u'class="tags"')
+		result = result[next:]
+		next = result.find(u':')
+		result = result[next+1:]
+		next = result.find(u'</div>')
+		tags = result[0:next].strip()
+		tags = get_tags.findall(tags)
+		all_projects[id]['categ'] = []
+		for tag in tags:
+			try:
+				all_projects[id]['categ'].append(tags_arr[tag])
+			except KeyError:
+				log_fh = open("parse_server_log", "a+")
+				log_fh.write("Unknown category: '" + tag.encode('utf-8') + "' in " + url_tmp + "\n")
+				log_fh.close()
+		
+		# Parse link
+		next = result.find(u'class="infopanel"')
+		if next > 0:
 			result = result[next:]
-			next = result.find(u':')
+			#next = result.find('alt=\'')
+			#result = result[next+5:]
+			#next = result.find('\'')
+			#sait = result[0:next].strip()
+			#try:
+				#all_projects[id]['sait'] = saits_arr[sait.decode('utf-8')]
+			#except KeyError:
+				#print "Ou NO!!!"# write in to log
+			next = result.find(u'<a')
+			result = result[next:]
+			next = result.find(u'href')
+			result = result[next:]
+			next = result.find(u'"')
 			result = result[next+1:]
-			next = result.find(u'</div>')
-			tags = result[0:next].strip()
-			tags = get_tags.findall(tags)
-			all_projects[id]['categ'] = []
-			for tag in tags:
-				try:
-					all_projects[id]['categ'].append(tags_arr[tag])
-				except KeyError:
-					log_fh = open("parse_server_log", "a+")
-					log_fh.write("Unknown category: '" + tag.encode('utf-8') + "' in " + url_tmp + "\n")
-					log_fh.close()
-			#all_projects[id]['categ'].insert(0, len(all_projects[id]['categ']))
-			
-			# Parse link
-			next = result.find(u'class="infopanel"')
-			if next > 0:
-				result = result[next:]
-				#next = result.find('alt=\'')
-				#result = result[next+5:]
-				#next = result.find('\'')
-				#sait = result[0:next].strip()
-				#try:
-					#all_projects[id]['sait'] = saits_arr[sait.decode('utf-8')]
-				#except KeyError:
-					#print "Ou NO!!!"# write in to log
-				next = result.find(u'<a')
-				result = result[next:]
-				next = result.find(u'href')
-				result = result[next:]
-				next = result.find(u'"')
-				result = result[next+1:]
-				next = result.find(u'"')
-				link = result[0:next].strip()
-				all_projects[id]['link'] = link.encode('utf-8')
-			else:
-				all_projects[id]['link'] = url_tmp
-			all_projects[id]['parsed'] = 1
-			
-			
-			download_stek.pop(0)
-			download_stek_size -= 1
-		except urllib2.URLError, e:
-			pass
+			next = result.find(u'"')
+			link = result[0:next].strip()
+			all_projects[id]['link'] = link.encode('utf-8')
+		else:
+			all_projects[id]['link'] = url_tmp
+		all_projects[id]['parsed'] = 1
+		
+		download_stek.pop(0)
+		download_stek_size -= 1
+	
 	for id in range(last_send_id+1, my_id):
 		if all_projects[id]['parsed'] == 1:
 			del all_projects[id]['parsed']

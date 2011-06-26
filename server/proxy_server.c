@@ -24,8 +24,8 @@ enum {
 	LISTEN_BACKLOG = 5,
 	MAX_PROJECTS_COUNT = 100
 };
-char *SEMAPHORE_NAME = NULL;//[40];// = "/fviewer_projects_semaphore2";
-char *SHARED_MEMORY_OBJECT_NAME = NULL;//[40];// = "fviewer_projects_shared_memory2";
+char *SEMAPHORE_NAME = NULL;
+char *SHARED_MEMORY_OBJECT_NAME = NULL;
 
 
 
@@ -202,7 +202,6 @@ void *getting_projects( void *arg) {
 			}
 			current = &projects.arr[current_id];
 			sprintf(current->str, "{\"id\": %d, \"loc_id\": %d, ", new_project_id, current_id);
-			//new_project	++; // Skip '{' symbol
 			start_len = strlen(current->str);
 			current->strlen = strlen(new_project + 1); // '+ 1' to skip '{' symbol
 			memcpy(current->str + start_len, new_project + 1, current->strlen);
@@ -326,6 +325,7 @@ int main(int argc, char *argv[])
 	projects.start = 0;
 	projects.end = 0;
 	projects.count = 0;
+	projects.now = -1;
 	projects.sem = (sem_t *) malloc(sizeof(sem_t));
     if (sem_init(projects.sem, 0, 1) < 0) {
 		perror("sem_init");
@@ -451,22 +451,32 @@ int main(int argc, char *argv[])
 							}
 							
 							if((id >= 0) && (id < USERS_COUNT) && (hash == users[id].hash)) {
+								printf("Start wait...\n");
 								sem_wait(projects.sem);
-								projects.now = users[id].last_project + 1;
-								if(projects.arr[users[id].last_project].id != users[id].last_project_id){
+								projects.now = (users[id].last_project + 1) % MAX_PROJECTS_COUNT;
+								if(users[id].last_project_id == -1 || projects.arr[users[id].last_project].id != users[id].last_project_id){
 									// User last request was too long ago, we don't have so old projects
 									projects.now = projects.start;
-									users[id].last_project = projects.start - 1;
+									users[id].last_project = (projects.start + MAX_PROJECTS_COUNT - 1) % MAX_PROJECTS_COUNT;
 								}
 								sem_post(projects.sem);
+								printf("yes!\n");
 								counter = 0;
-								//printf("t %d %d\n", users[id].last_project, projects.end);
+								printf("t %d %d\n", users[id].last_project, projects.end);
 								if(users[id].last_project != projects.end) {
 									k = users[id].last_project;
 									last_user_project = PROJECTS_TO_ONE_USER_COUNT - 1;
 									do{
 										k = (k + 1) % MAX_PROJECTS_COUNT;
-										//printf("k %d\n", k);
+										sem_wait(projects.sem);
+										projects.now = k;
+										if(projects.arr[k].id == -1) {
+											// This project updating now, lets see next
+											k = (k + 1) % MAX_PROJECTS_COUNT;
+											projects.now = k;
+										}
+										sem_post(projects.sem);
+										printf("k %d\n", k);
 										bool = 0;
 										for(j = 0; j < CATEGORIES_COUNT; j++) {
 											if(projects.arr[k].categories[j] == 1 && users[id].categories[j] == 1){
@@ -496,6 +506,7 @@ int main(int argc, char *argv[])
 										//printf("2\n");
 									} while(k != projects.end);
 								}
+								projects.now = -1;
 								if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, "[", 1, 0) < 0) {
 									//error("ERROR writing to socket");
 									remove_socket(i);

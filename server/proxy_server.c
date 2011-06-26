@@ -451,7 +451,7 @@ int main(int argc, char *argv[])
 							}
 							
 							if((id >= 0) && (id < USERS_COUNT) && (hash == users[id].hash)) {
-								printf("Start wait...\n");
+								//printf("Start wait...\n");
 								sem_wait(projects.sem);
 								projects.now = (users[id].last_project + 1) % MAX_PROJECTS_COUNT;
 								if(users[id].last_project_id == -1 || projects.arr[users[id].last_project].id != users[id].last_project_id){
@@ -460,9 +460,9 @@ int main(int argc, char *argv[])
 									users[id].last_project = (projects.start + MAX_PROJECTS_COUNT - 1) % MAX_PROJECTS_COUNT;
 								}
 								sem_post(projects.sem);
-								printf("yes!\n");
+								//printf("yes!\n");
 								counter = 0;
-								printf("t %d %d\n", users[id].last_project, projects.end);
+								//printf("t %d %d\n", users[id].last_project, projects.end);
 								if(users[id].last_project != projects.end) {
 									k = users[id].last_project;
 									last_user_project = PROJECTS_TO_ONE_USER_COUNT - 1;
@@ -476,7 +476,7 @@ int main(int argc, char *argv[])
 											projects.now = k;
 										}
 										sem_post(projects.sem);
-										printf("k %d\n", k);
+										//printf("k %d\n", k);
 										bool = 0;
 										for(j = 0; j < CATEGORIES_COUNT; j++) {
 											if(projects.arr[k].categories[j] == 1 && users[id].categories[j] == 1){

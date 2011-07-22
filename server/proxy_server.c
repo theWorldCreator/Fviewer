@@ -22,7 +22,9 @@ enum {
 	BUFFER_OUT_READ_SIZE = 180,		// Must be bigger than any permitted user request
 	READ_SOCKETS_COUNT = 1000,			// How many client sockets read simultaneously
 	LISTEN_BACKLOG = 5,
-	MAX_PROJECTS_COUNT = 100
+	MAX_PROJECTS_COUNT = 100,
+	PROCESSED_PROJECT = -2,
+	UNKNOWN_PROJECT = -1,
 };
 char *SEMAPHORE_NAME = NULL;
 char *SHARED_MEMORY_OBJECT_NAME = NULL;
@@ -38,7 +40,7 @@ struct _projects {
 	struct project *arr;
 };
 
-struct user{
+struct user {
 	int min_money, max_money;		// Money range, in rubbles
 	unsigned int categories[CATEGORIES_COUNT];
 	int without_money;			// Is client accept projects without specified budget
@@ -59,7 +61,7 @@ struct read_socket {
 	unsigned short int data_len;
 };
 
-struct link{
+struct link {
 	// Element of linked list with pointer to socket
 	unsigned short int id; // Socket id
 	struct link *prev, *next;
@@ -70,7 +72,7 @@ int current_socket_ind = -1;
 struct read_socket read_sockets[READ_SOCKETS_COUNT];
 struct link free_read_sockets_chain[READ_SOCKETS_COUNT], *last_free_read_socket, *first_free_read_socket;
 int read_socket_max_fd = -1;
-fd_set master_out_read_set, master_out_write_set;
+fd_set master_out_read_set;//, master_out_write_set;
 struct _projects projects;
 int project_now_id = -1;
 
@@ -79,57 +81,56 @@ void error(char *msg)
     perror(msg);
 }
 
-void remove_socket(int i) {
+void remove_socket() {
 	if(current_socket_ind >= 0) {
+		int i = current_socket_ind;
 		int fd = read_sockets[i].fd;
 		int j;
-		struct link *currient;
+		struct link *current;
 		read_sockets[i].fd = -1;
 		// Remove socket
 		close(fd);
 		FD_CLR(fd, &master_out_read_set);
-		if(read_socket_max_fd == fd){
+		if(read_socket_max_fd == fd) {
 			read_socket_max_fd = -1;
-			for(j = 0; j < READ_SOCKETS_COUNT; j++){
+			for(j = 0; j < READ_SOCKETS_COUNT; j++) {
 				if(read_sockets[j].fd > read_socket_max_fd) read_socket_max_fd = read_sockets[j].fd;
 			}
 		}
-		currient = &free_read_sockets_chain[i];
+		current = &free_read_sockets_chain[i];
 		// Put freed socket to beginning
-		if((currient != first_free_read_socket) && (&free_read_sockets_chain[i] != last_free_read_socket)){
-			currient->next->prev = currient->prev;
-			currient->prev->next = currient->next;
-			currient->next = first_free_read_socket;
-			currient->prev = NULL;
-			first_free_read_socket->prev = currient;
-			first_free_read_socket = currient;
+		if((current != first_free_read_socket) && (current != last_free_read_socket)){
+			current->next->prev = current->prev;
+			current->prev->next = current->next;
+			current->next = first_free_read_socket;
+			current->prev = NULL;
+			first_free_read_socket->prev = current;
+			first_free_read_socket = current;
 		}
-		if(currient == last_free_read_socket){
+		if(current == last_free_read_socket){
 			// If socket not in the middle of the chain, but in the end
-			last_free_read_socket->next = first_free_read_socket;
-			first_free_read_socket->prev = last_free_read_socket;
-			first_free_read_socket = last_free_read_socket;
-			last_free_read_socket = first_free_read_socket->prev;
-			first_free_read_socket->prev = NULL;
-			last_free_read_socket->next = NULL;
+			current->prev->next = NULL;
+			last_free_read_socket = current->prev;
+			current->next = first_free_read_socket;
+			current->prev = NULL;
+			first_free_read_socket->prev = current;
+			first_free_read_socket = current;
 		}
+		current_socket_ind = -1;
 	}
 }
 
 void sig_pipe_handler(int signum) {
-	remove_socket(current_socket_ind);
-	current_socket_ind = -1;
+	remove_socket();
 }
 
-int not_escaped(char *str) {
+int escaped(char *str) {
 	// Determines whether an even number of slashes in front of *str
 	int slash = 0;
-	int pos = 1;
-	while(*(str - pos) == '\\') {
+	while(*(--str) == '\\') {
 		slash = !slash;
-		pos++;
 	}
-	return !slash;
+	return slash;
 }
 
 void *getting_projects( void *arg) {
@@ -162,7 +163,7 @@ void *getting_projects( void *arg) {
     
     //Create semaphore for the possibility of using shared memory asynchronous 
     if ( (sem = sem_open(SEMAPHORE_NAME, O_CREAT, 0777, 0)) == SEM_FAILED ) {
-		perror("sem_open");
+		error("sem_open");
 	}
 	// Unlock semaphore. Default value is 1
 	sem_getvalue(sem, &value);
@@ -182,16 +183,16 @@ void *getting_projects( void *arg) {
 		// Wait free shared memory and when -- lock it (rather lock semaphore)
 		sem_wait(sem);
 		if(new_project[0] == '{') {
-			//printf("New project\n");
+			printf("New project\n");
 			// There are new project
 			if(projects.count == MAX_PROJECTS_COUNT) {
 				// Delete oldest project in list
 				current_id = projects.start;
 				sem_wait(projects.sem);
 				while(projects.now == current_id)
-					usleep(10);
+					usleep(1);
 				projects.start = (projects.start + 1) % MAX_PROJECTS_COUNT;
-				projects.arr[current_id].id = -2; // To be shure that no one will get this project until we update it in full
+				projects.arr[current_id].id = PROCESSED_PROJECT; // To be shure that no one will get this project until we update it in full
 				sem_post(projects.sem);
 				projects.count--;
 			} else if(projects.count == 0) {
@@ -219,10 +220,10 @@ void *getting_projects( void *arg) {
 				current->categories[i] = 0;
 			tmp = current->str;
 			while((tmp = strchr(tmp, '"')) != NULL) {
-				if(not_escaped(tmp)) {
+				if(!escaped(tmp)) {
 					tmp++; // skip '"' symbol
 					next = strchr(tmp, '"');
-					if(next != NULL && next[1] == ':' && not_escaped(next)) {
+					if(next != NULL && next[1] == ':' && !escaped(next)) {
 						*next = '\0';
 						if(strcmp(tmp, "money") == 0) {
 							sscanf(next + 1, ":%d", &(current->money));
@@ -262,7 +263,7 @@ int main(int argc, char *argv[])
 	int PROJECTS_TO_ONE_USER_COUNT = 30;	// Only PROJECTS_TO_ONE_USER_COUNT projects you can get in one connection
 	
 	int bool;
-	int len, i, j, k, counter, id, hash, sock, error_id, handle, prev_len, cat_id, wrong_arg;
+	int len, i, j, k, counter, id, hash, sock, error_id, handle, prev_len, cat_id, wrong_arg, last_project, end;
 	pthread_t thread;
 	int user_size = sizeof(struct user);
 	
@@ -295,7 +296,7 @@ int main(int argc, char *argv[])
 	free_read_sockets_chain[0].id = 0;
 	free_read_sockets_chain[0].prev = NULL;
 	free_read_sockets_chain[0].next = &free_read_sockets_chain[1];
-	for(i = 1; i < (READ_SOCKETS_COUNT-1); i++){
+	for(i = 1; i < (READ_SOCKETS_COUNT - 1); i++){
 		free_read_sockets_chain[i].id = i;
 		free_read_sockets_chain[i].prev = &free_read_sockets_chain[i-1];
 		free_read_sockets_chain[i].next = &free_read_sockets_chain[i+1];
@@ -314,7 +315,7 @@ int main(int argc, char *argv[])
 	fd_set tmp_set;
 	FD_ZERO(&tmp_set);
 	FD_ZERO(&master_out_read_set);
-	FD_ZERO(&master_out_write_set);
+	//FD_ZERO(&master_out_write_set);
 	struct timeval tv;
 	tv.tv_sec = 0;
 	tv.tv_usec = 0;
@@ -328,7 +329,7 @@ int main(int argc, char *argv[])
 	projects.now = -1;
 	projects.sem = (sem_t *) malloc(sizeof(sem_t));
     if (sem_init(projects.sem, 0, 1) < 0) {
-		perror("sem_init");
+		error("sem_init");
 	}
 	
 	int first_user = USERS_COUNT-1;
@@ -369,17 +370,18 @@ int main(int argc, char *argv[])
 	for(;;) {
 		FD_ZERO(&tmp_set);
 		FD_SET(sockfd_out, &tmp_set);
-		while((select(sockfd_out+1, &tmp_set, NULL, NULL, &tv) > 0) && (FD_ISSET(sockfd_out, &tmp_set) != 0)) {
+		while((select(sockfd_out + 1, &tmp_set, NULL, NULL, &tv) > 0) && (FD_ISSET(sockfd_out, &tmp_set) != 0)) {
 			sock = accept(sockfd_out, (struct sockaddr *) &serv_out, &serv_out_len);
 			if(sock >= 0) {
 				// First free socket
-				id = (*first_free_read_socket).id;
+				id = first_free_read_socket->id;
 				if(read_sockets[id].fd != -1) {
 					// If it was not free -- clean it
 					close(read_sockets[id].fd);
 					FD_CLR(read_sockets[id].fd, &master_out_read_set);
 					if(read_socket_max_fd == read_sockets[id].fd) {
 						// Updating read_socket_max_fd
+						read_sockets[id].fd = -1;
 						read_socket_max_fd = -1;
 						for(j = 0; j < READ_SOCKETS_COUNT; j++) {
 							if(read_sockets[j].fd > read_socket_max_fd) read_socket_max_fd = read_sockets[j].fd;
@@ -389,19 +391,19 @@ int main(int argc, char *argv[])
 				read_sockets[id].fd = sock;
 				read_sockets[id].data_len = 0;
 				// Throw used socket unto the end of chain
-				(*first_free_read_socket).prev = last_free_read_socket;
-				(*last_free_read_socket).next = first_free_read_socket;
+				first_free_read_socket->prev = last_free_read_socket;
+				last_free_read_socket->next = first_free_read_socket;
 				last_free_read_socket = first_free_read_socket;
-				first_free_read_socket = (*last_free_read_socket).next;
-				(*first_free_read_socket).prev = NULL;
-				(*last_free_read_socket).next = NULL; 
+				first_free_read_socket = last_free_read_socket->next;
+				first_free_read_socket->prev = NULL;
+				last_free_read_socket->next = NULL; 
 				FD_SET(sock, &master_out_read_set);
 				if(sock > read_socket_max_fd) read_socket_max_fd = sock;
 			}
 		}
 		tmp_set = master_out_read_set;
-		len = select(read_socket_max_fd+1, &tmp_set, NULL, NULL, &tv);
-		if(len > 0){
+		len = select(read_socket_max_fd + 1, &tmp_set, NULL, NULL, &tv);
+		if(len > 0) {
 			for(i = 0; i < READ_SOCKETS_COUNT; i++) {
 				if(FD_ISSET(read_sockets[i].fd, &tmp_set)) {
 					// Handling request from user
@@ -416,7 +418,6 @@ int main(int argc, char *argv[])
 						}
 					} else {
 						len = recv(read_sockets[i].fd, tmp_buffer, BUFFER_OUT_READ_SIZE - read_sockets[i].data_len, 0);
-						handle = 0;
 						prev_len = read_sockets[i].data_len;
 						tmp_buffer[len] = '\0';
 						if(strchr(tmp_buffer, '}')) {
@@ -424,10 +425,10 @@ int main(int argc, char *argv[])
 						}
 						memcpy(read_sockets[i].data + prev_len, tmp_buffer, len);
 						read_sockets[i].data_len += len;
+						read_sockets[i].data[read_sockets[i].data_len] = '\0';
 					}
 					if(handle) {
 						//printf(" %d\n", projects.count);
-						read_sockets[i].data[read_sockets[i].data_len] = '\0';
 						error_id = 1;	// Wrong request
 						if(read_sockets[i].data_len >= 24 && read_sockets[i].data_len <= 30) {
 							// "Old" user
@@ -447,36 +448,42 @@ int main(int argc, char *argv[])
 									}
 									*next = '"';
 								}
-								tmp = next + 1;
+								if(next != NULL)
+									tmp = next + 1;
 							}
 							
 							if((id >= 0) && (id < USERS_COUNT) && (hash == users[id].hash)) {
 								//printf("Start wait...\n");
 								sem_wait(projects.sem);
-								projects.now = (users[id].last_project + 1) % MAX_PROJECTS_COUNT;
-								if(users[id].last_project_id == -1 || projects.arr[users[id].last_project].id != users[id].last_project_id){
+								last_project = users[id].last_project;
+								projects.now = (last_project + 1) % MAX_PROJECTS_COUNT;
+								if(users[id].last_project_id == UNKNOWN_PROJECT || projects.arr[users[id].last_project].id != users[id].last_project_id){
 									// User last request was too long ago, we don't have so old projects
+									last_project = projects.end - 1; // Wrong value, which show that there are projects to handle
 									projects.now = projects.start;
 									users[id].last_project = (projects.start + MAX_PROJECTS_COUNT - 1) % MAX_PROJECTS_COUNT;
 								}
 								sem_post(projects.sem);
-								//printf("yes!\n");
+								//printf("Projects semaphore unlocked\n");
 								counter = 0;
-								//printf("t %d %d\n", users[id].last_project, projects.end);
-								if(users[id].last_project != projects.end) {
-									k = users[id].last_project;
+								if(last_project != projects.end) {
+									k = (projects.now + MAX_PROJECTS_COUNT - 1) % MAX_PROJECTS_COUNT;
 									last_user_project = PROJECTS_TO_ONE_USER_COUNT - 1;
 									do{
 										k = (k + 1) % MAX_PROJECTS_COUNT;
 										sem_wait(projects.sem);
 										projects.now = k;
-										if(projects.arr[k].id == -1) {
-											// This project updating now, lets see next
+										if(projects.arr[k].id == PROCESSED_PROJECT) {
+											// This project is updating now, lets see next
+											if(k == projects.end) {
+												projects.now = -1;
+												sem_post(projects.sem);
+												break;
+											}
 											k = (k + 1) % MAX_PROJECTS_COUNT;
 											projects.now = k;
 										}
 										sem_post(projects.sem);
-										//printf("k %d\n", k);
 										bool = 0;
 										for(j = 0; j < CATEGORIES_COUNT; j++) {
 											if(projects.arr[k].categories[j] == 1 && users[id].categories[j] == 1){
@@ -484,8 +491,9 @@ int main(int argc, char *argv[])
 												break;
 											}
 										}
-										if(bool == 0) continue;
-										//printf("12\n");
+										if(bool == 0) {
+											continue;
+										}
 										bool = 0;
 										if(projects.arr[k].money == 0) {
 											if(users[id].without_money == 1) bool = 1;
@@ -498,14 +506,18 @@ int main(int argc, char *argv[])
 												}
 											}
 										}
-										if(bool == 0) continue;
-										//printf("13\n");
+										if(bool == 0) {
+											continue;
+										}
 										last_user_project = (last_user_project + 1) % PROJECTS_TO_ONE_USER_COUNT;
 										user_projects[last_user_project] = k;
 										counter++;
-										//printf("2\n");
 									} while(k != projects.end);
+									end = projects.now;
+								} else {
+									end = users[id].last_project;
 								}
+								//printf("end %d\n", end);
 								projects.now = -1;
 								if(read_sockets[i].fd >= 0 && send(read_sockets[i].fd, "[", 1, 0) < 0) {
 									//error("ERROR writing to socket");
@@ -538,13 +550,12 @@ int main(int argc, char *argv[])
 									remove_socket(i);
 									continue;
 								}
-								users[id].last_project = user_projects[last_user_project];
+								users[id].last_project = end;
 								users[id].last_project_id = projects.arr[users[id].last_project].id;
-							}else{
+							} else {
 								error_id = 2;	// Authorization error
 							}
-						}
-						if(read_sockets[i].fd >= 0 && read_sockets[i].data_len > 30 && read_sockets[i].data_len <= BUFFER_OUT_READ_SIZE){
+						} else if(read_sockets[i].data_len > 30) {
 							// New user
 							error_id = 0;	// Everything is good
 							//printf("new user, '%s'", read_sockets[i].data);
@@ -553,7 +564,7 @@ int main(int argc, char *argv[])
 							tmp_user.max_money = -1;
 							tmp_user.without_money = -1;
 							tmp_user.last_project = MAX_PROJECTS_COUNT;
-							tmp_user.last_project_id = -1;
+							tmp_user.last_project_id = UNKNOWN_PROJECT;
 							for(j = 0; j < CATEGORIES_COUNT; j++) tmp_user.categories[j] = 0;
 							len = -1;
 							
@@ -611,7 +622,7 @@ int main(int argc, char *argv[])
 							} else {
 								if(tmp_user.last_project >= MAX_PROJECTS_COUNT || tmp_user.last_project < 0) {
 									tmp_user.last_project = 0;
-									tmp_user.last_project_id = -1;
+									tmp_user.last_project_id = UNKNOWN_PROJECT;
 								}
 								first_user = (first_user + 1) % USERS_COUNT;
 								memcpy(users + first_user, &tmp_user, user_size);
@@ -630,11 +641,10 @@ int main(int argc, char *argv[])
 							if(read_sockets[i].fd >= 0) send(read_sockets[i].fd, "{\"error\": \"Wrong userid\"}", 25, 0);
 						}
 						remove_socket(i);
-					} else {
-						if(read_sockets[i].data_len == BUFFER_OUT_READ_SIZE)
-							remove_socket(i);
-					}
-					current_socket_ind = -1;
+					}// else {
+					//	if(read_sockets[i].data_len == BUFFER_OUT_READ_SIZE)
+					//		remove_socket(i);
+					//}
 				}
 			}
 		}

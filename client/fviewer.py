@@ -41,8 +41,8 @@ def get_data_path():
 
 
 
-if os.path.isfile(get_data_file("", ".client_settings.py")):
-	exec compile(open(get_data_file("", ".client_settings.py"), "r").read(), "client_settings", 'exec')
+if os.path.isfile(get_data_file("", ".settings.py")):
+	exec compile(open(get_data_file("", ".settings.py"), "r").read(), "client_settings", 'exec')
 else:
 	# Default settings
 	class Settings:
@@ -51,11 +51,12 @@ else:
 			self.max_money = 0				# 0 means, that there no upper limit
 			self.without_money = 1			# Client accept projects without specified budget
 			self.categories = range(0, 17)
+			self.search_string = ''
 			self.money_type = 2				# Currency, 2 means rubbles
 			self.new_window = 1				# Open new projects in new window
 			self.audio_notification = 1
 			self.audio_notification_level = 0.5	# Half volume
-	settings = Settings()
+settings = Settings()
 
 categories_list = [u'Дизайн', u'Программирование', u'Веб-строй', u'Раскрутка', u'Тексты и переводы', u'Верстка', u'Flash', u'Логотипы', u'Иллюстрации', u'3D', u'Аудио/Видео', u'Иконки', u'Разное', u'Фото', u'Консалтинг', u'Маркетинг', u'Администрирование']
 categories_dict = {}
@@ -112,7 +113,7 @@ class Projects:
 		self.matched = []
 		for i in range(fviewer.projects_count):
 			project = fviewer.projects[i]
-			if design.now_searching:
+			if design.now_search_text != '':
 				if unicode(project['title']).lower().find(design.now_search_text) == -1 and unicode(project['description']).lower().find(design.now_search_text) == -1:
 					continue
 			if not project['read']:
@@ -189,6 +190,7 @@ class FviewerDesign:
 		self.project_desc_html.connect('key-press-event', self.hot_key)
 		self.project_desc_html.zoom_out()
 		self.project_desc_html.show()
+		self.builder.get_object("SearchEntry").set_text(settings.search_string)
 		
 		
 		
@@ -315,13 +317,12 @@ class FviewerDesign:
 		self.make_icons_grey()
 		
 		
-		#self.seing_now_id = -1
 		self.first_run = True
 		self.unread_projects_icon = False
-		self.now_searching = False
 		self.now_paused = False
 		self.dialog_last_answer = 0
-		self.now_search_text = ''
+		text = self.builder.get_object("SearchEntry").get_text()
+		self.now_search_text = unicode(text).lower()
 		self.playbin = gst.element_factory_make("playbin2", "my-playbin")	# For playing audio alerts
 		self.playbin.set_property("uri", "file://" + get_data_file("media", "sound.wav"))
 		
@@ -362,7 +363,7 @@ class FviewerDesign:
 			link = link[:self.MAX_LINK_LEN - 3] + "..."
 		self.builder.get_object("LinkButton").set_label(link)
 		self.main_window.set_title(title)
-		self.project_desc_html.load_string("<html><head><title></title></head><body>" + text + "</body></html>", "text/html", "utf-8", "")
+		self.project_desc_html.load_string(text, "text/html", "utf-8", "")
 	
 	
 	def show_project(self, index):
@@ -465,20 +466,7 @@ class FviewerDesign:
 				fviewer.id = "-1"
 		
 		# Save new settings
-		open(get_data_file("", ".client_settings.py"), 'w').write(
-"""
-class Settings:
-	def __init__(self):
-		self.min_money = """ + str(settings.min_money) + """
-		self.max_money = """ + str(settings.max_money) + """
-		self.without_money = """ + str(settings.without_money) + """
-		self.categories = """ + str(settings.categories) + """
-		self.money_type = """ + str(settings.money_type) + """
-		self.new_window = """ + str(settings.new_window) + """
-		self.audio_notification = """ + str(settings.audio_notification) + """
-		self.audio_notification_level = """ + str(settings.audio_notification_level) + """
-settings = Settings()"""
-		)
+		open(get_data_file("", ".settings.py"), 'w').write( settings_file_content() )
 		
 	def settings_window_changed(self):
 		"""
@@ -510,12 +498,7 @@ settings = Settings()"""
 		if key != 0:
 			if self.builder.get_object("SearchEntry").get_text() != self.now_search_text:
 				text = self.builder.get_object("SearchEntry").get_text()
-				if text == '':
-					self.now_searching = False
-					self.now_search_text = ''
-				else:
-					self.now_searching = True
-					self.now_search_text = unicode(text).lower()
+				self.now_search_text = unicode(text).lower()
 			else:
 				return False
 		
@@ -534,7 +517,7 @@ settings = Settings()"""
 				if ind == projects.current_id:
 					self.projects_list_buttons[a][0].set_markup(get_current_title(title))
 				else:
-					self.projects_list_buttons[a][0].set_label(get_usual_title(title))
+					self.projects_list_buttons[a][0].set_markup(get_usual_title(title))
 			else:
 				self.projects_list_buttons[a][0].set_markup(get_unread_title(title))
 			
@@ -574,8 +557,9 @@ settings = Settings()"""
 			self.update_projects_list()
 			if self.first_run:
 				# If client do not main window to be opened than new projects appears, let's set project which he sees as open main window manually
-				self.first_run = False
 				self.show_project(projects.first_unread_id())
+		if self.first_run:
+			self.first_run = False
 	
 	
 	def make_icons_grey(self, make_grey = True):
@@ -744,6 +728,7 @@ settings = Settings()"""
 		self.main_window.hide()
 		self.dialog.hide()
 		self.settings_dialog.hide()
+		open(get_data_file("", ".settings.py"), 'w').write( settings_file_content() )
 		gtk.main_quit()
 
 class Fviewer(threading.Thread):
@@ -758,16 +743,13 @@ class Fviewer(threading.Thread):
 			
 			self.last_project = -1
 			self.last_project_id = -1
-			self.id = "-1"
+			self.id = -1
 			
-			Address_url = "https://github.com/theWorldCreator/Fviewer/raw/master/server/Address"
-			self.HOST, self.PORT = urlopen(Address_url).read().strip().split("\n")
-			self.PORT = int(self.PORT)
-			#self.HOST = ""
+			self.HOST = "fviewer.info"
+			self.PORT = 23143
 			
 			self.projects = []
 			self.projects_count = 0
-			#self.unread_projects_count = 0
 			self.internet_problems = 1		# No connection before we try to find it
 			self.quit = 0					# 0 -- normal work, 1 - pause, 2 - quit
 		
@@ -784,19 +766,15 @@ class Fviewer(threading.Thread):
 				if self.quit == 0:
 					timeout = self.get_projects()
 				time.sleep(timeout)
-		
-		def reescape_data(self, data):
-			"""
-			reescape & and ; symbols which escaped because of server features
-			"""
-			data = re.sub(r"([^\\])((\\\\)*)\\&", r"\1\2&", data)
-			return re.sub(r"([^\\])((\\\\)*)\\;", r"\1\2;", data)
 			
 		
 		def read_data(self, sock):
 			data = ""
 			now = time.time()
-			while data != "&&" and re.search(r"[^\\](\\\\)*&&", data) is None:
+			answ = {}
+			
+			end = False
+			while not end:
 				try:
 					# FIXME: What will happen, if there no data when you trying to recv()?
 					tmp = sock.recv(1024)
@@ -804,41 +782,48 @@ class Fviewer(threading.Thread):
 					tmp = False
 				if tmp:
 					data += tmp
+				
 				if (time.time()-now) > self.read_timeout:
 					return -1
-			if data[0:12] == "Wrong userid":
-				self.id = "-1"
-				return -1
-			if data[0:10] == "Wrong data":
-				return -1
-			data = data.replace("&&", "&")
-			return data
+				#print data
+				try:
+					answ = json.loads(data)
+					end = True
+				except ValueError:
+					end = False
+			
+			if 'error' in answ:
+				if answ['error'] == 'Wrong userid':
+					self.id = -1
+					return -1
+				if answ['error'] == 'Wrong data':
+					return -1
+			
+			print data
+			return answ
 			
 			
 		def authorization(self):
-			self.projects = []
-			self.projects_count = 0
-			#self.unread_projects_count = 0
+			self.id = -1
+			self.hash = randrange(10000, 100000)
 			
-			self.id = "-1"
-			self.hash = str(randrange(10000, 100000))
-			data = self.hash + " " + str(settings.min_money) + " " + str(settings.max_money) + " " + str(settings.without_money) + " " + str(self.last_project) + " " + str(self.last_project_id) + " " + str(len(settings.categories)) + "$"
-			for i in settings.categories:
-				data += " " + str(i)
-			data += "&"
 			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			try:
 				sock.connect((self.HOST, self.PORT))
 				sock.settimeout(self.write_timeout)
-				sock.send(data)
+				sock.send(json.dumps({"hash": self.hash, "min_mon": settings.min_money, "max_mon": settings.max_money,
+										"wth_mon": settings.without_money, "last_proj": self.last_project,
+										"last_proj_id": self.last_project_id, "categ": settings.categories}))
 			except:
 				return False
 			data = self.read_data(sock)
+			sock.close()
+			
 			if data == -1:
 				return False
-			self.id = data[:-1]		# Clean & symbol from the end
 			
-			sock.close()
+			self.id = data["id"]
+			
 			return True
 		
 		
@@ -846,7 +831,7 @@ class Fviewer(threading.Thread):
 			"""
 			Returns after that what delay you need to call this function again
 			"""
-			if self.id == "-1":
+			if self.id == -1:
 				if not self.authorization():
 					gobject.idle_add(design.internet_problems)
 					return self.reconnection_timeout
@@ -856,7 +841,7 @@ class Fviewer(threading.Thread):
 			try:
 				sock.connect((self.HOST, self.PORT))
 				sock.settimeout(self.write_timeout)
-				sock.send(self.id + " " + self.hash + "&")
+				sock.send(json.dumps({"id": self.id, "hash": self.hash}))
 			except:
 				gobject.idle_add(design.internet_problems)
 				return self.reconnection_timeout
@@ -864,36 +849,22 @@ class Fviewer(threading.Thread):
 			data = self.read_data(sock)
 			sock.close()
 			
-			prev = 0
-			if isinstance(data, str):
+			if data != -1 and len(data) > 0:
 				added = 0
-				for m in re.finditer(r"[^\\](\\\\)*&", data):
-					next = m.start() + 1
-					try:
-						project = json.loads(self.reescape_data(data[prev:next]))
-						
-						project['categ'].pop(0) # First element = length of other part of the list, it was necessary because of server features
-						
-						project['status_str'] = get_project_status_str(project)
-						project['read'] = 0
-						
-						# Some stuff to make project description look good in the WebKit
-						project['description'] = project['description'].replace("\r\n", "<br />").replace("\n", "<br />").replace("\r", "<br />")
-						
-						self.projects.append(project)
-						#self.unread_projects_count += 1
-						if self.projects_count >= self.max_projects:
-							self.projects.pop(0)
-						else:
-							self.projects_count += 1
-						added = 1
-					except ValueError:
-						## JSON parsing error
-						#fh = open("can_not_parse_json", "a+")
-						#fh.write(self.reescape_data(data[prev:next])+"\n")
-						#fh.close()
-						pass
-					prev = next + 1
+				for project in data:
+					project['status_str'] = get_project_status_str(project)
+					project['read'] = 0
+					
+					project['description'] = get_description(project['description'])
+					
+					self.projects.append(project)
+					if self.projects_count >= self.max_projects:
+						self.projects.pop(0)
+					else:
+						self.projects_count += 1
+					added = 1
+					self.last_project = project['loc_id']
+					self.last_project_id = project['id']
 				if added:
 					gobject.idle_add(design.play_audio_notification)
 					gobject.idle_add(design.update_from_core_thread)
@@ -958,6 +929,24 @@ def get_unread_title(title):
 	if len(title) > design.MAX_BOLD_TITLE_LEN:
 		title = title[:design.MAX_BOLD_TITLE_LEN - 3] + "..."
 	return "<b>" + title + "</b>"
+
+def get_description(text):
+	# Some stuff to make project description look good in the WebKit
+	return "<html><head><title></title></head><body>" + text.replace("\r\n", "<br />").replace("\n", "<br />").replace("\r", "<br />") + "</body></html>"
+
+def settings_file_content():
+	return """
+class Settings:
+	def __init__(self):
+		self.min_money = """ + str(settings.min_money) + """
+		self.max_money = """ + str(settings.max_money) + """
+		self.without_money = """ + str(settings.without_money) + """
+		self.categories = """ + str(settings.categories) + """
+		self.search_string = '""" + design.builder.get_object("SearchEntry").get_text() + """'
+		self.money_type = """ + str(settings.money_type) + """
+		self.new_window = """ + str(settings.new_window) + """
+		self.audio_notification = """ + str(settings.audio_notification) + """
+		self.audio_notification_level = """ + str(settings.audio_notification_level)
 
 design = FviewerDesign()
 fviewer = Fviewer()

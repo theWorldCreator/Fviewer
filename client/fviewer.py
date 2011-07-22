@@ -77,6 +77,7 @@ class Projects:
 		self.matched = []
 	
 	def get(self, pr_id):
+		print pr_id
 		if pr_id == -1 or self.matched[pr_id] == -1:
 			return None
 		fv_id = self.matched[pr_id]['project_id']
@@ -87,6 +88,8 @@ class Projects:
 	def set(self, pr_id):
 		self.current_id = pr_id
 		project = self.current()
+		if project is None:
+			return None
 		self.current_real_id = project['id']
 		if project['read'] == 0:
 			#fviewer.unread_projects_count -= 1
@@ -149,8 +152,10 @@ class Projects:
 			# Let's show first project list item
 			if self.count >= design.max_projects:
 				return self.count - design.max_projects
-			else:
+			elif self.count > 0:
 				return 0
+			else:
+				return -1
 		i = 0
 		while i < self.count and self.get(i)['read']:
 			i += 1
@@ -319,6 +324,7 @@ class FviewerDesign:
 		
 		self.first_run = True
 		self.unread_projects_icon = False
+		self.main_window_first_present = True
 		self.now_paused = False
 		self.dialog_last_answer = 0
 		text = self.builder.get_object("SearchEntry").get_text()
@@ -376,6 +382,8 @@ class FviewerDesign:
 		
 		projects.set(index)
 		project = projects.current()
+		if project is None:
+			return
 		project_id = project['project_id']
 			
 		# Mark current title
@@ -417,7 +425,7 @@ class FviewerDesign:
 	def show_next_unread_project(self, open_anyway = False):
 		if (open_anyway or settings.new_window == 1) and projects.unread_count > 0 and self.main_window.get_property('visible') == False and self.dialog.get_property('visible') == False:
 			self.show_project(projects.first_unread_id())
-			self.main_window.present()
+			self.present_main_window()
 	
 	def open_project_from_list(self, widget, key, i):
 		self.X, self.Y = self.main_window.get_position()
@@ -535,7 +543,7 @@ class FviewerDesign:
 	
 	def show_projects_list(self, widget = None):
 		self.update_projects_list(widget)
-		self.main_window.present()
+		self.present_main_window()
 		if self.main_window.get_property('visible') == False:
 			self.main_window.move(self.X, self.Y)
 	
@@ -560,6 +568,24 @@ class FviewerDesign:
 				self.show_project(projects.first_unread_id())
 		if self.first_run:
 			self.first_run = False
+	
+	def present_main_window(self):
+		if not self.main_window_first_present:
+			self.main_window.present()
+		else:
+			# Set default list width
+			title = self.projects_list_buttons[0][0].get_text()
+			visible = self.projects_list_buttons[0][0].get_property('visible')
+			# Set very long fish title text and projects list will automatically resized 
+			self.projects_list_buttons[0][0].set_markup(get_unread_title(u"Пример очень очень очень очень длинного заголовка"))
+			if not visible:
+				self.projects_list_buttons[0][0].show()
+			self.main_window.present()
+			self.projects_list_buttons[0][0].set_markup(title)
+			if not visible:
+				self.projects_list_buttons[0][0].hide()
+			self.main_window_first_present = False
+		
 	
 	
 	def make_icons_grey(self, make_grey = True):
